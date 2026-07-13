@@ -1,4 +1,4 @@
-export const MAX_BOIDS = 100_000;
+export const MAX_BOIDS = 500_000;
 export const MAX_GRID_DIMENSION = 64;
 export const MAX_GRID_CELLS = MAX_GRID_DIMENSION * MAX_GRID_DIMENSION;
 export const COMPUTE_WORKGROUP_SIZE = 128;

@@ -63,12 +63,22 @@ export class CameraRig {
   }
 
   zoomBy(delta: number): void {
-    this.distance = THREE.MathUtils.clamp(this.distance + delta, 16, 110);
+    this.distance = THREE.MathUtils.clamp(this.distance + delta, 16, 180);
+  }
+
+  transformMovement(input: Readonly<THREE.Vector2>, target: THREE.Vector2): THREE.Vector2 {
+    const yaw = this.mode === 'classic' ? 0 : this.mode === 'follow' ? this.followYaw : this.orbitYaw;
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    return target.set(
+      input.x * cos + input.y * sin,
+      -input.x * sin + input.y * cos,
+    );
   }
 
   orbitBy(deltaYaw: number, deltaPitch = 0): void {
     if (this.mode !== 'orbit') this.mode = 'orbit';
-    this.orbitYaw += deltaYaw;
+    this.orbitYaw = this.normalizeAngle(this.orbitYaw + deltaYaw);
     this.orbitPitch = THREE.MathUtils.clamp(this.orbitPitch + deltaPitch, 0.22, 1.18);
   }
 
@@ -135,7 +145,7 @@ export class CameraRig {
     const speed = Math.hypot(velocity.x, velocity.z);
     if (speed > 0.1) {
       const targetYaw = Math.atan2(velocity.x, velocity.z);
-      this.followYaw = this.lerpAngle(this.followYaw, targetYaw, 0.16);
+      this.followYaw = this.normalizeAngle(this.lerpAngle(this.followYaw, targetYaw, 0.16));
     }
 
     const portraitLift = this.aspect < 1 ? THREE.MathUtils.lerp(1.08, 1.28, 1 - this.aspect) : 1;
@@ -143,7 +153,7 @@ export class CameraRig {
       this.desiredPosition.set(
         this.desiredFocus.x,
         this.desiredFocus.y + this.distance * 1.08 * portraitLift,
-        this.desiredFocus.z + this.distance * 0.62,
+        this.desiredFocus.z - this.distance * 0.62,
       );
       return;
     }
@@ -151,9 +161,9 @@ export class CameraRig {
     if (this.mode === 'orbit') {
       const horizontal = Math.cos(this.orbitPitch) * this.distance;
       this.desiredPosition.set(
-        this.desiredFocus.x + Math.sin(this.orbitYaw) * horizontal,
+        this.desiredFocus.x - Math.sin(this.orbitYaw) * horizontal,
         this.desiredFocus.y + Math.sin(this.orbitPitch) * this.distance * portraitLift,
-        this.desiredFocus.z + Math.cos(this.orbitYaw) * horizontal,
+        this.desiredFocus.z - Math.cos(this.orbitYaw) * horizontal,
       );
       return;
     }
@@ -196,5 +206,9 @@ export class CameraRig {
   private lerpAngle(from: number, to: number, blend: number): number {
     const delta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
     return from + delta * blend;
+  }
+
+  private normalizeAngle(angle: number): number {
+    return Math.atan2(Math.sin(angle), Math.cos(angle));
   }
 }

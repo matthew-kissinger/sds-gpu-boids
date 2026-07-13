@@ -103,9 +103,8 @@ export class World {
   );
   private readonly assetLayer = new THREE.Group();
   private readonly perimeterLayer = new THREE.Group();
-  private readonly grass: THREE.InstancedMesh;
   private readonly disposableRoots: THREE.Object3D[] = [];
-  private extent = 220;
+  private extent = 140;
   private assetsReady = false;
 
   constructor(scene: THREE.Scene) {
@@ -124,9 +123,6 @@ export class World {
     this.goalRing.position.y = 0.045;
     this.goalCrown.rotation.x = Math.PI / 2;
     this.group.add(this.goalFill, this.goalRing, this.goalBeacon, this.goalCrown, this.assetLayer, this.perimeterLayer);
-
-    this.grass = this.createGrass(24_000);
-    this.group.add(this.grass);
 
     const hemisphere = new THREE.HemisphereLight('#f7f0d5', '#35532f', 1.75);
     const sun = new THREE.DirectionalLight('#fff1bd', 2.25);
@@ -163,10 +159,10 @@ export class World {
     this.floor.scale.set(terrainSpan, terrainSpan, 1);
     this.floorTexture.repeat.set(Math.max(16, terrainSpan / 7), Math.max(16, terrainSpan / 7));
 
-    this.gate.width = Math.max(18, extent * 0.1);
+    this.gate.width = Math.max(16, extent * 0.1);
     this.gate.position.set(0, extent);
-    this.pen.halfWidth = Math.max(52, extent * 0.28);
-    this.pen.depth = Math.max(54, extent * 0.27);
+    this.pen.halfWidth = Math.max(32, extent * 0.22);
+    this.pen.depth = Math.max(34, extent * 0.24);
     this.goal.radius = this.pen.halfWidth;
     this.goal.center.set(0, extent + this.pen.depth * 0.5);
     this.goalFill.position.set(this.goal.center.x, 0.025, this.goal.center.y);
@@ -175,7 +171,6 @@ export class World {
     this.goalCrown.position.set(this.gate.position.x, 48, this.gate.position.y + 4);
     this.goalFill.scale.set(this.pen.halfWidth * 2, this.pen.depth, 1);
     this.goalRing.scale.setScalar(this.gate.width * 0.62);
-    this.scatterGrass();
   }
 
   update(elapsed: number, holdProgress: number): void {
@@ -271,16 +266,25 @@ export class World {
         key: (`rock${(index % 3) + 1}`) as 'rock1' | 'rock2' | 'rock3',
         angle: index * 2.399,
         radius: this.extent * (1.08 + ((index * 17) % 31) / 100),
-        scale: 2.2 + (index % 5) * 0.42,
+        scale: 4 + (index % 5) * 0.8,
       });
     }
     for (const key of ['rock1', 'rock2', 'rock3'] as const) {
       const gltf = models.get(key);
       if (!gltf) continue;
+      gltf.scene.updateMatrixWorld(true);
+      const bounds = new THREE.Box3().setFromObject(gltf.scene);
+      const nativeHeight = Math.max(0.0001, bounds.max.y - bounds.min.y);
+      const normalization = 0.2 / nativeHeight;
       this.addInstancedGltf(gltf, placements.filter((entry) => entry.key === key).map((entry) => {
-        const position = new THREE.Vector3(Math.cos(entry.angle) * entry.radius, 0, Math.sin(entry.angle) * entry.radius);
+        const finalScale = normalization * entry.scale;
+        const position = new THREE.Vector3(
+          Math.cos(entry.angle) * entry.radius,
+          -bounds.min.y * finalScale,
+          Math.sin(entry.angle) * entry.radius,
+        );
         const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), entry.angle * 1.7);
-        return new THREE.Matrix4().compose(position, rotation, new THREE.Vector3(entry.scale, entry.scale, entry.scale));
+        return new THREE.Matrix4().compose(position, rotation, new THREE.Vector3(finalScale, finalScale, finalScale));
       }), `rock-ring-${key}`);
     }
   }
@@ -400,55 +404,6 @@ export class World {
       object.castShadow = false;
       object.receiveShadow = true;
     });
-  }
-
-  private createGrass(count: number): THREE.InstancedMesh {
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute([
-      -0.08, 0, 0, 0.08, 0, 0, 0, 0.78, 0,
-      0, 0, -0.08, 0, 0, 0.08, 0, 0.78, 0,
-    ], 3));
-    geometry.setIndex([0, 1, 2, 3, 4, 5]);
-    geometry.computeVertexNormals();
-    const material = new THREE.MeshStandardMaterial({
-      color: '#91ad58',
-      roughness: 1,
-      metalness: 0,
-      side: THREE.DoubleSide,
-    });
-    const grass = new THREE.InstancedMesh(geometry, material, count);
-    grass.name = 'Home Field instanced meadow grass';
-    grass.frustumCulled = false;
-    grass.castShadow = false;
-    grass.receiveShadow = false;
-    return grass;
-  }
-
-  private scatterGrass(): void {
-    let seed = 0x5d5f37;
-    const random = (): number => {
-      seed |= 0;
-      seed = (seed + 0x6d2b79f5) | 0;
-      let value = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-      value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
-      return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
-    };
-    const matrix = new THREE.Matrix4();
-    const quaternion = new THREE.Quaternion();
-    const scale = new THREE.Vector3();
-    for (let index = 0; index < this.grass.count; index += 1) {
-      const angle = random() * Math.PI * 2;
-      quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
-      const size = 0.55 + random() * 0.75;
-      scale.set(size, size, size);
-      matrix.compose(
-        new THREE.Vector3((random() * 2 - 1) * this.extent * 1.18, 0, (random() * 2 - 1) * this.extent * 1.18),
-        quaternion,
-        scale,
-      );
-      this.grass.setMatrixAt(index, matrix);
-    }
-    this.grass.instanceMatrix.needsUpdate = true;
   }
 
   private createFloorTexture(): THREE.CanvasTexture {

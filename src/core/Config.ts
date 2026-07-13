@@ -1,4 +1,7 @@
-export const COUNT_LADDER = [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 50_000, 75_000, 100_000] as const;
+export const COUNT_LADDER = [
+  1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 50_000, 75_000, 100_000,
+  125_000, 150_000, 200_000, 300_000, 500_000,
+] as const;
 
 export type ScenarioId = 'constant' | 'field' | 'herd' | 'goal';
 
@@ -43,5 +46,5 @@ export function readConfig(search = window.location.search): PrototypeConfig {
 }
 
 export function worldExtentFor(_count: number, _scenario: ScenarioId): number {
-  return 220;
+  return 140;
 }

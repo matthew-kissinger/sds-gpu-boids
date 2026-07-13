@@ -74,7 +74,7 @@ export class FlockRenderer {
       this.mesh.geometry = nextGeometry;
     }
     this.geometry.instanceCount = this.boids.count;
-    this.scale.value = this.boids.count >= 75_000 ? 0.46 : this.boids.count >= 32_000 ? 0.62 : 0.9;
+    this.scale.value = this.boids.count >= 75_000 ? 0.52 : this.boids.count >= 32_000 ? 0.7 : 1.12;
   }
 
   dispose(): void {

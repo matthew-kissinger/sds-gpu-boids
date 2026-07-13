@@ -3,7 +3,10 @@ import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const DEFAULT_COUNTS = [1000, 2000, 4000, 8000, 16000, 32000, 50000, 75000, 100000];
+const DEFAULT_COUNTS = [
+  1000, 2000, 4000, 8000, 16000, 32000, 50000, 75000, 100000,
+  125000, 150000, 200000, 300000, 500000,
+];
 const DEFAULT_SCENARIOS = ['constant', 'field', 'herd'];
 
 function parseArgs(argv) {
@@ -99,7 +102,7 @@ Options:
 
 Examples:
   node scripts/benchmark.mjs --counts 1000,16000 --duration 5000 --warmup 1000
-  node scripts/benchmark.mjs --headed --scenarios herd --counts 50000,100000
+  node scripts/benchmark.mjs --headed --scenarios herd --counts 100000,200000,500000
 `);
 }
 

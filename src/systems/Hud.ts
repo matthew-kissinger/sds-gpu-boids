@@ -1,4 +1,7 @@
-export const BOID_COUNT_LADDER = [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 50_000, 75_000, 100_000] as const;
+export const BOID_COUNT_LADDER = [
+  1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 50_000, 75_000, 100_000,
+  125_000, 150_000, 200_000, 300_000, 500_000,
+] as const;
 
 export type SimulationScenario = 'constant' | 'field' | 'herd' | 'goal';
 

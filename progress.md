@@ -38,3 +38,13 @@ Original prompt: Build a standalone new Sheep Dog Simulator prototype that moves
 - Added follow, free-orbit, and classic overhead camera views with wheel/plus-minus zoom, pointer drag, Q/E look, and C/HUD view cycling.
 - Implemented GPU-side gate crossing retirement: retired sheep leave compact-grid/flocking work, move into deterministic pen slots, and feed the retirement objective counter.
 - Added browser regressions for dog forward/left facing and zoom/orbit/view cycling, and captured a full south-to-north traversal showing the gate and pen without browser errors.
+
+## Camera-relative controller and scale correction
+
+- Unified keyboard and touch-stick movement around active camera axes: W/S are screen forward/back and A/D are screen left/right in follow, orbit, and classic views.
+- Corrected the orbit/classic camera-side convention that inverted lateral input after changing views.
+- Split Jep's fixed 60 Hz simulation position/heading from its interpolated render transform, reduced turn response from 15 to 8, and normalized accumulated angles to remove lateral snapping and high-refresh stair-step shake.
+- Reduced Home Field from a 440-meter to a 280-meter square, expanded maximum camera zoom from 110 to 180, and enlarged sheep at every render tier.
+- Removed the spike-grass instances, retaining the textured meadow surface with no extra grass draw.
+- Applied the production rock asset's 0.2-meter native-height normalization before instancing so rocks sit on the ground at believable scale outside the fence.
+- Preserved the existing count ladder and added 125k, 150k, 200k, 300k, and 500k stress tiers with GPU storage sized to 500,000 sheep.

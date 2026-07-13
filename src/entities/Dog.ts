@@ -39,7 +39,7 @@ export const DEFAULT_DOG_TUNING: DogTuning = {
   maxSpeed: 34,
   acceleration: 17,
   braking: 22,
-  turnResponsiveness: 15,
+  turnResponsiveness: 8,
   edgePadding: 1.2,
   barkCooldown: 1.05,
   barkDuration: 0.46,
@@ -48,6 +48,7 @@ export const DEFAULT_DOG_TUNING: DogTuning = {
 
 export class Dog {
   readonly group = new THREE.Group();
+  readonly position = new THREE.Vector3();
   readonly velocity = new THREE.Vector3();
   readonly forward = new THREE.Vector3(0, 0, 1);
 
@@ -58,6 +59,9 @@ export class Dog {
   private readonly modelRoot = new THREE.Group();
   private readonly loader = createHomeFieldLoader();
   private readonly targetVelocity = new THREE.Vector3();
+  private readonly previousPosition = new THREE.Vector3();
+  private heading = 0;
+  private previousHeading = 0;
   private readonly movement = new THREE.Vector2();
   private readonly legs: THREE.Mesh[] = [];
   private readonly geometries: THREE.BufferGeometry[] = [];
@@ -195,6 +199,8 @@ export class Dog {
 
   update(deltaSeconds: number, elapsedSeconds: number, inputMovement: THREE.Vector2, bounds: ArenaBounds): void {
     const delta = Math.min(Math.max(deltaSeconds, 0), 0.05);
+    this.previousPosition.copy(this.position);
+    this.previousHeading = this.heading;
     this.movement.copy(inputMovement);
     if (this.movement.lengthSq() > 1) this.movement.normalize();
 
@@ -204,28 +210,30 @@ export class Dog {
     this.velocity.lerp(this.targetVelocity, velocityBlend);
     if (this.targetVelocity.lengthSq() === 0 && this.velocity.lengthSq() < 0.0025) this.velocity.set(0, 0, 0);
 
-    this.group.position.addScaledVector(this.velocity, delta);
-    this.group.position.x = THREE.MathUtils.clamp(
-      this.group.position.x,
+    this.position.addScaledVector(this.velocity, delta);
+    this.position.x = THREE.MathUtils.clamp(
+      this.position.x,
       -bounds.halfWidth + this.tuning.edgePadding,
       bounds.halfWidth - this.tuning.edgePadding,
     );
-    this.group.position.z = THREE.MathUtils.clamp(
-      this.group.position.z,
+    this.position.z = THREE.MathUtils.clamp(
+      this.position.z,
       -bounds.halfDepth + this.tuning.edgePadding,
       bounds.halfDepth - this.tuning.edgePadding,
     );
 
     const speedSquared = this.velocity.lengthSq();
     if (speedSquared > 0.01) {
-      const targetHeading = Math.atan2(this.velocity.x, this.velocity.z);
+      const headingVelocity = this.targetVelocity.lengthSq() > 0.01 ? this.targetVelocity : this.velocity;
+      const targetHeading = Math.atan2(headingVelocity.x, headingVelocity.z);
       const headingDelta = Math.atan2(
-        Math.sin(targetHeading - this.group.rotation.y),
-        Math.cos(targetHeading - this.group.rotation.y),
+        Math.sin(targetHeading - this.heading),
+        Math.cos(targetHeading - this.heading),
       );
       const turnBlend = 1 - Math.exp(-this.tuning.turnResponsiveness * delta);
-      this.group.rotation.y += headingDelta * turnBlend;
-      this.forward.set(Math.sin(this.group.rotation.y), 0, Math.cos(this.group.rotation.y));
+      this.heading += headingDelta * turnBlend;
+      this.heading = Math.atan2(Math.sin(this.heading), Math.cos(this.heading));
+      this.forward.set(Math.sin(this.heading), 0, Math.cos(this.heading));
     }
 
     const speedRatio = Math.min(1, Math.sqrt(speedSquared) / this.tuning.maxSpeed);
@@ -249,6 +257,16 @@ export class Dog {
     this.updateBark(delta);
   }
 
+  prepareRender(interpolation: number): void {
+    const alpha = THREE.MathUtils.clamp(interpolation, 0, 1);
+    this.group.position.lerpVectors(this.previousPosition, this.position, alpha);
+    const headingDelta = Math.atan2(
+      Math.sin(this.heading - this.previousHeading),
+      Math.cos(this.heading - this.previousHeading),
+    );
+    this.group.rotation.y = this.previousHeading + headingDelta * alpha;
+  }
+
   tryBark(): boolean {
     if (this.barkCooldownRemaining > 0) return false;
 
@@ -261,8 +279,8 @@ export class Dog {
     this.transitionAnimation(this.barkAction, 0.08);
 
     const event: BarkPulseEvent = {
-      x: this.group.position.x,
-      z: this.group.position.z,
+      x: this.position.x,
+      z: this.position.z,
       directionX: this.forward.x,
       directionZ: this.forward.z,
       maxRadius: this.tuning.barkMaxRadius,
@@ -278,7 +296,7 @@ export class Dog {
   }
 
   writeInfluence(target: DogInfluenceTarget): DogInfluenceTarget {
-    target.position.copy(this.group.position);
+    target.position.copy(this.position);
     target.velocity.copy(this.velocity);
     target.forward.copy(this.forward);
     target.barkStrength = this.barkStrength;
@@ -300,8 +318,12 @@ export class Dog {
   }
 
   reset(position: Readonly<THREE.Vector3> = new THREE.Vector3()): void {
+    this.position.copy(position);
+    this.previousPosition.copy(position);
     this.group.position.copy(position);
     this.group.rotation.set(0, 0, 0);
+    this.heading = 0;
+    this.previousHeading = 0;
     this.velocity.set(0, 0, 0);
     this.targetVelocity.set(0, 0, 0);
     this.forward.set(0, 0, 1);

@@ -1,6 +1,6 @@
 # Sheepdog GPU Home Field
 
-A standalone, playable WebGPU re-imagining of Sheep Dog Simulator's Home Field. It uses the original Jep dog, farm, fence, gate, tree, rock, homestead, music, bark, and bleat assets while a new GPU compute engine simulates and directly renders up to 100,000 sheep.
+A standalone, playable WebGPU re-imagining of Sheep Dog Simulator's Home Field. It uses the original Jep dog, farm, fence, gate, tree, rock, homestead, music, bark, and bleat assets while a new GPU compute engine simulates and directly renders 100,000 sheep, with explicit stress tiers through 500,000.
 
 This is a new-engine prototype. It is not a Sheep Dog Simulator scene, game mode, multiplayer client, or replacement release. It deliberately does not import the production game's `shared/` deterministic simulation or connect to its Cloudflare Worker.
 
@@ -37,6 +37,7 @@ The production preview runs at `http://127.0.0.1:4190`. Benchmarking defaults to
 ## Controls
 
 - `WASD` or arrow keys: move the dog
+- Movement follows the active camera: up/down are screen forward/back and left/right are screen left/right
 - `Space`: bark
 - Mouse/touch drag or `Q` / `E`: look around in free-orbit view
 - Mouse wheel or `+` / `-`: zoom
@@ -59,7 +60,7 @@ Herd 60% of the flock through the centered north gate. Sheep that cross the thre
 - `Home Field scatter`: places the flock between Jep and the north pen for a complete herding run.
 - `Tight flock`: starts compressed and stresses crowd response.
 
-The count ladder is 1k, 2k, 4k, 8k, 16k, 32k, 50k, 75k, and 100k. The same complete ladder is available in the UI and benchmark runner.
+The count ladder is 1k, 2k, 4k, 8k, 16k, 32k, 50k, 75k, 100k, 125k, 150k, 200k, 300k, and 500k. Tiers above 100k are deliberate stress/failure probes, not promised gameplay targets. The same complete ladder is available in the UI and benchmark runner.
 
 ## What the metrics mean
 

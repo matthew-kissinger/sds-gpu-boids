@@ -51,6 +51,7 @@ export class Game {
   private tuning: FlockTuning = { ...DEFAULT_FLOCK_TUNING };
   private readonly performance = new PerformanceTracker();
   private readonly movement = new THREE.Vector2();
+  private readonly inputMovement = new THREE.Vector2();
   private readonly goalPosition = new THREE.Vector3();
   private readonly dogStart = new THREE.Vector3();
   private readonly arenaBounds: ArenaBounds = { halfWidth: 46, halfDepth: 46 };
@@ -133,6 +134,7 @@ export class Game {
   start(): void {
     if (this.config.manualStep) {
       this.fixedUpdate(1 / 60);
+      this.dog.prepareRender(1);
       this.render();
       this.publishDiagnostics();
       this.installTestHooks();
@@ -169,12 +171,13 @@ export class Game {
   private fixedUpdate(delta: number): void {
     if (this.paused || this.won || this.fatalError) return;
     this.simulationElapsed += delta;
-    this.input.readMovement(this.movement);
+    this.input.readMovement(this.inputMovement);
+    this.cameraRig.transformMovement(this.inputMovement, this.movement);
     this.dog.update(delta, this.simulationElapsed, this.movement, this.arenaBounds);
 
     if (this.input.consumeBarkPressed() && this.dog.tryBark()) {
       this.boids.setBark(
-        this.dog.group.position,
+        this.dog.position,
         this.dog.forward,
         this.tuning.barkRadius,
         this.tuning.barkStrength,
@@ -185,7 +188,7 @@ export class Game {
     }
 
     this.boids.setDog(
-      this.dog.group.position,
+      this.dog.position,
       this.dog.velocity,
       this.tuning.dogRadius,
       this.tuning.dogStrength,
@@ -209,6 +212,7 @@ export class Game {
     const orbitDirection = this.input.readOrbitDirection();
     if (orbitDirection !== 0) this.cameraRig.orbitBy(orbitDirection * frame.deltaSeconds * 1.8);
 
+    this.dog.prepareRender(frame.interpolation);
     this.cameraRig.update(frame.deltaSeconds, this.dog.group.position, this.dog.velocity);
     const goalFraction = this.config.count > 0 ? this.goalCount / this.config.count : 0;
     if (!this.paused && !this.won && !this.fatalError) {
@@ -274,7 +278,7 @@ export class Game {
     this.dogStart.set(-extent * 0.15, 0, -extent * 0.9);
     this.dog.reset(this.dogStart);
     this.boids.setDog(
-      this.dog.group.position,
+      this.dog.position,
       this.dog.velocity,
       this.tuning.dogRadius,
       this.tuning.dogStrength,
@@ -411,7 +415,12 @@ export class Game {
       simulationElapsed: this.simulationElapsed,
       config: { ...this.config },
       dog: {
-        position: { x: this.dog.group.position.x, y: this.dog.group.position.y, z: this.dog.group.position.z },
+        position: { x: this.dog.position.x, y: this.dog.position.y, z: this.dog.position.z },
+        visualPosition: {
+          x: this.dog.group.position.x,
+          y: this.dog.group.position.y,
+          z: this.dog.group.position.z,
+        },
         velocity: { x: this.dog.velocity.x, y: this.dog.velocity.y, z: this.dog.velocity.z },
         forward: { x: this.dog.forward.x, y: this.dog.forward.y, z: this.dog.forward.z },
         rotationY: this.dog.group.rotation.y,
@@ -488,6 +497,7 @@ export class Game {
     window.advanceTime = (milliseconds: number) => {
       const steps = Math.max(1, Math.min(600, Math.round(milliseconds / (1_000 / 60))));
       for (let index = 0; index < steps; index += 1) this.fixedUpdate(1 / 60);
+      this.dog.prepareRender(1);
       this.render();
       this.publishDiagnostics();
     };

@@ -2,16 +2,16 @@
 
 ## Outcome
 
-The standalone GPU prototype is now a complete playable Home Field experiment. The 440-meter square pasture uses authentic SDS environment, dog, sheep styling, fence, gate, and audio assets; supports 1,000 through 100,000 sheep; and has a full dog-pressure, bark, gate-retirement, pen, and victory loop. Flock Lab exposes live GPU behavior tuning without rebuilding the simulation.
+The standalone GPU prototype is now a complete playable Home Field experiment. The 280-meter square pasture uses authentic SDS environment, dog, sheep styling, fence, gate, and audio assets; supports normal tiers from 1,000 through 100,000 sheep plus measured stress tiers through 500,000; and has a full dog-pressure, bark, gate-retirement, pen, and victory loop. Flock Lab exposes live GPU behavior tuning without rebuilding the simulation.
 
 The production `sds` repository was not modified. This prototype remains outside its deterministic multiplayer boundary.
 
 ## Implementation ledger
 
 1. GPU compute - storage-resident position/velocity/retirement state, compact count/scan/scatter grid, bounded neighborhood queries, gate integration, retirement reduction, and direct TSL render nodes.
-2. Home Field - enlarged square meadow, authentic farmhouse/homestead/fence/gate/tree/rock assets, exterior tree line, centered north opening, attached three-sided pen, procedural grass, fog, and lighting.
+2. Home Field - compact square textured meadow, authentic farmhouse/homestead/fence/gate/tree/rock assets, exterior tree line, normalized grounded rocks, centered north opening, attached three-sided pen, fog, and lighting. The distracting spike-grass layer was removed.
 3. Characters - authentic animated Jep model and production-style merged instanced sheep geometry with forward-facing head/eyes, rendered in one flock draw.
-4. Gameplay - keyboard/touch dog movement, bark pressure, gate retirement, pause/restart, follow/orbit/classic cameras, zoom, audio, and responsive HUD.
+4. Gameplay - camera-relative keyboard/touch dog movement, interpolated dog visuals, bark pressure, gate retirement, pause/restart, follow/orbit/classic cameras, 16-180 zoom, audio, and responsive HUD.
 5. Tuning - four presets; flocking/dog/bark/boundary/goal switches; fifteen live sliders; reset and JSON copy.
 6. Validation - CPU/GPU oracle, unit tests, desktop/mobile interaction, visual pixel inspection, console checks, production build, and reproducible benchmark runner.
 
@@ -36,7 +36,7 @@ The requested existing SDS Home Field assets were preferred over generated subst
 - Desktop gameplay, tuning, gate retirement/win, pause/restart, count/layout, directional facing, three camera modes, zoom/orbit, movement, bark, canvas, and capability tests pass.
 - Mobile canvas and touch interaction tests pass.
 - Desktop and mobile production canvas inspection: nonblank, no page errors, no console errors, Home Field assets loaded.
-- Post-rebuild 100,000-sheep production benchmark: p95 7.1 ms, 2.02 ms GPU compute, 4.41 ms GPU render, real-time simulation, zero invalid indices, and zero measured dropped steps on the RTX 3070 host.
+- Compact-field stress ladder: 100k-150k cleared the 60 Hz timing gate, 200k cleared the 30 Hz gate, and 300k/500k produced the intended below-30-Hz simulation-lag failure mode. Every tier retained zero invalid indices on the RTX 3070 host.
 - Fresh production benchmark evidence is recorded in [MEASURED_RESULTS.md](MEASURED_RESULTS.md).
 
 ## Visual scorecard

@@ -13,6 +13,7 @@ type Diagnostics = {
   };
   dog?: {
     position?: { x?: number; y?: number; z?: number };
+    visualPosition?: { x?: number; y?: number; z?: number };
     forward?: { x?: number; z?: number };
     rotationY?: number;
     barkStrength?: number;
@@ -130,23 +131,71 @@ test('goal demo advances objective reduction through the win state', async ({ pa
   await expect(page.locator('#game-overlay')).toHaveAttribute('data-state', 'won');
 });
 
-test('dog faces its direction of travel', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name.includes('mobile'), 'Keyboard facing regression runs in the desktop project.');
+test('dog movement stays screen-relative and turns smoothly', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes('mobile'), 'Keyboard camera-relative regression runs in the desktop project.');
   const live = await openLiveRuntime(page, '/?count=1000&scenario=field');
   test.skip(!live, 'This browser exercised the explicit unsupported-WebGPU path.');
 
-  await page.keyboard.down('KeyW');
-  await page.waitForTimeout(350);
-  await page.keyboard.up('KeyW');
-  await expect.poll(async () => (await diagnostics(page))?.dog?.forward?.z ?? 0).toBeGreaterThan(0.9);
+  await page.keyboard.press('KeyC');
+  await page.keyboard.down('KeyE');
+  await page.waitForTimeout(900);
+  await page.keyboard.up('KeyE');
+  const before = position(await diagnostics(page));
+  const yaw = (await diagnostics(page))?.camera?.yaw ?? 0;
 
-  await page.reload();
-  expect(await openLiveRuntime(page, '/?count=1000&scenario=field')).toBe(true);
   await page.keyboard.down('KeyA');
-  await page.waitForTimeout(850);
+  const rotations = await page.evaluate(async () => {
+    const values: number[] = [];
+    for (let index = 0; index < 50; index += 1) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const runtimeWindow = window as typeof window & { __THREE_GAME_DIAGNOSTICS__?: Diagnostics };
+      values.push(runtimeWindow.__THREE_GAME_DIAGNOSTICS__?.dog?.rotationY ?? 0);
+    }
+    return values;
+  });
   await page.keyboard.up('KeyA');
-  await expect.poll(async () => (await diagnostics(page))?.dog?.forward?.x ?? 0).toBeLessThan(-0.9);
-  expect((await diagnostics(page))?.dog?.rotationY ?? 0).toBeCloseTo(-Math.PI / 2, 1);
+  const after = position(await diagnostics(page));
+  const displacementX = after.x - before.x;
+  const displacementZ = after.z - before.z;
+  const screenRightX = Math.cos(yaw);
+  const screenRightZ = -Math.sin(yaw);
+  expect(displacementX * screenRightX + displacementZ * screenRightZ).toBeLessThan(-0.5);
+
+  const turnSteps = rotations.slice(1).map((rotation, index) => Math.abs(Math.atan2(
+    Math.sin(rotation - rotations[index]!),
+    Math.cos(rotation - rotations[index]!),
+  )));
+  expect(Math.max(...turnSteps)).toBeLessThan(0.22);
+
+});
+
+test('up down left and right follow the active camera axes', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes('mobile'), 'Keyboard camera-axis coverage runs in desktop Chrome.');
+  test.setTimeout(60_000);
+
+  const measure = async (key: 'KeyW' | 'KeyS' | 'KeyA' | 'KeyD') => {
+    const live = await openLiveRuntime(page, '/?count=1000&scenario=field');
+    test.skip(!live, 'This browser exercised the explicit unsupported-WebGPU path.');
+    await page.keyboard.press('KeyC');
+    await page.keyboard.down('KeyE');
+    await page.waitForTimeout(700);
+    await page.keyboard.up('KeyE');
+    const start = position(await diagnostics(page));
+    const yaw = (await diagnostics(page))?.camera?.yaw ?? 0;
+    await page.keyboard.down(key);
+    await page.waitForTimeout(450);
+    await page.keyboard.up(key);
+    const end = position(await diagnostics(page));
+    return {
+      forward: (end.x - start.x) * Math.sin(yaw) + (end.z - start.z) * Math.cos(yaw),
+      right: (end.x - start.x) * Math.cos(yaw) - (end.z - start.z) * Math.sin(yaw),
+    };
+  };
+
+  expect((await measure('KeyW')).forward).toBeGreaterThan(0.5);
+  expect((await measure('KeyS')).forward).toBeLessThan(-0.5);
+  expect((await measure('KeyA')).right).toBeLessThan(-0.5);
+  expect((await measure('KeyD')).right).toBeGreaterThan(0.5);
 });
 
 test('camera supports zoom, orbit look, and view cycling', async ({ page }, testInfo) => {

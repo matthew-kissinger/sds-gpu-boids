@@ -42,7 +42,8 @@ When WebGPU is ready, it exercises:
 - count rebuild;
 - workload rebuild;
 - GPU gate-crossing retirement, objective reduction, and win state;
-- dog forward/left movement facing;
+- camera-relative W/S/A/D projection after orbiting the view;
+- interpolated dog heading with a bounded per-render-frame turn step;
 - wheel zoom, pointer orbit, and three-view camera cycling;
 - console and uncaught page errors;
 - active-game screenshots and canvas color variance.
@@ -72,6 +73,7 @@ The inspector records canvas CSS size, drawing-buffer size, sampled color varian
 - Renderer and grid diagnostics are captured.
 - The short benchmark plumbing run writes valid JSON.
 - A named adapter completes the intended benchmark matrix.
+- Stress tiers continue until a measured timing/simulation failure mode is recorded.
 - Browser tabs, contexts, and preview processes are closed after verification.
 
 ## Evidence report template

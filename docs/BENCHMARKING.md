@@ -2,7 +2,7 @@
 
 ## Principle
 
-The benchmark reports the highest measured stable tier. It does not infer 100,000-agent performance from a smaller run, treat CPU submission time as GPU time, or call a sparse open-field result representative of a compressed herd.
+The benchmark reports the highest measured stable tier and continues through configured stress tiers to expose a failure mode. It does not infer performance from a smaller run, treat CPU submission time as GPU time, or call a sparse open-field result representative of a compressed herd.
 
 ## Standard run
 
@@ -40,7 +40,7 @@ Supported runner options:
 
 ```text
 --url URL
---counts 1000,16000,100000
+--counts 1000,16000,100000,150000,200000,300000,500000
 --scenarios constant,field,herd
 --warmup MILLISECONDS
 --duration MILLISECONDS
