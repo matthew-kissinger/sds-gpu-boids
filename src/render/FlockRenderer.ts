@@ -13,18 +13,19 @@ import {
 } from 'three/tsl';
 import { GpuBoidSystem } from '../gpu';
 
-const WHITE = new THREE.Color('#f2ead2');
-const WOOL_SHADOW = new THREE.Color('#c9b991');
-const FACE = new THREE.Color('#302923');
-const HOOF = new THREE.Color('#191817');
-const EYE = new THREE.Color('#fdf9e9');
-const NOSE = new THREE.Color('#c97c7e');
+const WOOL = new THREE.Color('#f7f2df');
+const FACE = new THREE.Color('#38322d');
+const HOOF = new THREE.Color('#24211f');
+const EYE = new THREE.Color('#fbfaf2');
+const PUPIL = new THREE.Color('#090908');
+const NOSE = new THREE.Color('#d18a8d');
 
 export class FlockRenderer {
   readonly mesh: THREE.Mesh;
-  readonly trianglesPerSheep: number;
 
-  private readonly geometry = this.createSheepGeometry();
+  private readonly detailedGeometry: THREE.InstancedBufferGeometry;
+  private readonly crowdGeometry: THREE.InstancedBufferGeometry;
+  private geometry: THREE.InstancedBufferGeometry;
   private readonly material = new THREE.MeshStandardNodeMaterial({
     roughness: 0.92,
     metalness: 0,
@@ -32,13 +33,18 @@ export class FlockRenderer {
   private readonly scale = uniform(0.82);
 
   constructor(private readonly boids: GpuBoidSystem) {
+    this.detailedGeometry = this.createProductionSheepGeometry(false);
+    this.crowdGeometry = this.createProductionSheepGeometry(true);
+    this.geometry = boids.count >= 32_000 ? this.crowdGeometry : this.detailedGeometry;
+
     const nodes = boids.getRenderNodes();
     const speedSq = nodes.velocity.x.mul(nodes.velocity.x).add(nodes.velocity.z.mul(nodes.velocity.z));
     const safeLength = speedSq.max(float(0.0001)).sqrt();
     const forward = vec2(nodes.velocity.x.div(safeLength), nodes.velocity.z.div(safeLength));
     const phase = time.mul(7).add(hash(instanceIndex).mul(6.283));
     const bob = phase.sin().abs().mul(speedSq.min(16).div(16)).mul(0.08);
-    const local = positionLocal.mul(this.scale);
+    const retiredScale = float(0.16).add(nodes.state.mul(0.84));
+    const local = positionLocal.mul(this.scale).mul(retiredScale);
     const rotated = vec3(
       local.x.mul(forward.y).add(local.z.mul(forward.x)),
       local.y.add(bob),
@@ -52,22 +58,33 @@ export class FlockRenderer {
     this.mesh.frustumCulled = false;
     this.mesh.castShadow = false;
     this.mesh.receiveShadow = false;
-    this.mesh.name = '100k GPU-instanced Home Field sheep';
-    this.trianglesPerSheep = (this.geometry.index?.count ?? this.geometry.getAttribute('position').count) / 3;
+    this.mesh.name = 'Production-style GPU-instanced Home Field sheep';
+    this.syncCount();
+  }
+
+  get trianglesPerSheep(): number {
+    return (this.geometry.index?.count ?? this.geometry.getAttribute('position').count) / 3;
   }
 
   syncCount(): void {
+    const nextGeometry = this.boids.count >= 32_000 ? this.crowdGeometry : this.detailedGeometry;
+    if (nextGeometry !== this.geometry) {
+      this.geometry.instanceCount = 0;
+      this.geometry = nextGeometry;
+      this.mesh.geometry = nextGeometry;
+    }
     this.geometry.instanceCount = this.boids.count;
-    this.scale.value = this.boids.count >= 75_000 ? 0.42 : this.boids.count >= 32_000 ? 0.58 : 0.88;
+    this.scale.value = this.boids.count >= 75_000 ? 0.46 : this.boids.count >= 32_000 ? 0.62 : 0.9;
   }
 
   dispose(): void {
-    this.geometry.dispose();
+    this.detailedGeometry.dispose();
+    this.crowdGeometry.dispose();
     this.material.dispose();
     this.mesh.removeFromParent();
   }
 
-  private createSheepGeometry(): THREE.InstancedBufferGeometry {
+  private createProductionSheepGeometry(crowdLod: boolean): THREE.InstancedBufferGeometry {
     const parts: THREE.BufferGeometry[] = [];
     const add = (geometry: THREE.BufferGeometry, color: THREE.Color): void => {
       const compatible = geometry.index ? geometry.toNonIndexed() : geometry;
@@ -82,58 +99,56 @@ export class FlockRenderer {
       parts.push(compatible);
     };
 
-    const body = new THREE.IcosahedronGeometry(0.78, 0);
-    body.scale(1, 0.82, 1.18);
-    body.translate(0, 0.88, 0.05);
-    add(body, WHITE);
+    const body = new THREE.SphereGeometry(1, crowdLod ? 6 : 12, crowdLod ? 4 : 8);
+    body.scale(1, 0.9, 1.1);
+    body.translate(0, 0.875, 0);
+    add(body, WOOL);
 
-    const woolPatch = new THREE.IcosahedronGeometry(0.55, 0);
-    woolPatch.scale(1.15, 0.75, 1.25);
-    woolPatch.translate(0, 1.05, 0.18);
-    add(woolPatch, WOOL_SHADOW);
-
-    const head = new THREE.IcosahedronGeometry(0.38, 0);
-    head.scale(0.8, 0.95, 1.05);
-    head.translate(0, 0.92, -0.93);
+    const head = new THREE.SphereGeometry(0.45, crowdLod ? 6 : 10, crowdLod ? 4 : 6);
+    head.scale(0.85, 0.9, 1);
+    head.translate(0, 0.88, 0.85);
     add(head, FACE);
 
-    const legGeometry = new THREE.ConeGeometry(0.11, 0.55, 3);
-    for (const [x, z] of [[-0.34, -0.35], [0.34, -0.35], [-0.34, 0.43], [0.34, 0.43]] as const) {
-      const leg = legGeometry.clone();
-      leg.translate(x, 0.29, z);
+    const legSource = new THREE.CylinderGeometry(0.11, 0.13, 0.55, crowdLod ? 3 : 6);
+    for (const [x, z] of [[-0.32, 0.42], [0.32, 0.42], [-0.32, -0.42], [0.32, -0.42]] as const) {
+      const leg = legSource.clone();
+      leg.translate(x, 0.275, z);
       add(leg, HOOF);
     }
-    legGeometry.dispose();
-
-    const earGeometry = new THREE.ConeGeometry(0.14, 0.34, 3);
-    for (const side of [-1, 1]) {
-      const ear = earGeometry.clone();
-      ear.rotateZ(side * 1.05);
-      ear.translate(side * 0.31, 1.15, -0.88);
-      add(ear, FACE);
-    }
-    earGeometry.dispose();
+    legSource.dispose();
 
     for (const side of [-1, 1]) {
-      const eye = new THREE.OctahedronGeometry(0.075, 0);
-      eye.scale(1, 1.1, 0.4);
-      eye.translate(side * 0.13, 1.01, -1.27);
+      const eye = crowdLod
+        ? new THREE.TetrahedronGeometry(0.08, 0)
+        : new THREE.SphereGeometry(0.08, 6, 4);
+      eye.scale(1, 1.1, 0.45);
+      eye.translate(side * 0.14, 0.94, 1.28);
       add(eye, EYE);
+
+      const pupil = crowdLod
+        ? new THREE.TetrahedronGeometry(0.04, 0)
+        : new THREE.SphereGeometry(0.04, 5, 3);
+      pupil.scale(1, 1.1, 0.5);
+      pupil.translate(side * 0.14, 0.94, 1.305);
+      add(pupil, PUPIL);
+
+      if (!crowdLod) {
+        const shine = new THREE.SphereGeometry(0.018, 4, 3);
+        shine.translate(side * 0.155, 0.965, 1.325);
+        add(shine, EYE);
+      }
     }
 
-    const nose = new THREE.OctahedronGeometry(0.065, 0);
-    nose.scale(1.2, 0.75, 0.45);
-    nose.translate(0, 0.82, -1.31);
+    const nose = crowdLod
+      ? new THREE.TetrahedronGeometry(0.055, 0)
+      : new THREE.SphereGeometry(0.05, 6, 4);
+    nose.scale(1.2, 0.75, 0.4);
+    nose.translate(0, 0.8, 1.3);
     add(nose, NOSE);
-
-    const tail = new THREE.ConeGeometry(0.12, 0.48, 5);
-    tail.rotateX(-1.05);
-    tail.translate(0, 1.1, 0.92);
-    add(tail, WHITE);
 
     const merged = mergeGeometries(parts, false);
     for (const part of parts) part.dispose();
-    if (!merged) throw new Error('Could not build the Home Field sheep geometry.');
+    if (!merged) throw new Error('Could not build the production-style sheep geometry.');
     const geometry = new THREE.InstancedBufferGeometry();
     geometry.setIndex(merged.index);
     for (const [name, value] of Object.entries(merged.attributes)) geometry.setAttribute(name, value);

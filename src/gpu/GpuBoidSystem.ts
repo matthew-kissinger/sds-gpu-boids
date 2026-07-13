@@ -6,6 +6,7 @@ import {
   Fn,
   If,
   Loop,
+  Return,
   atomicAdd,
   atomicMax,
   atomicStore,
@@ -182,6 +183,8 @@ export class GpuBoidSystem {
   );
   private readonly barkDirectionStrengthUniform = uniform(new THREE.Vector4(0, 0, -1, 0));
   private readonly goalCenterRadiusUniform = uniform(new THREE.Vector4(0, 0, 0, 12));
+  private readonly gatePenUniform = uniform(new THREE.Vector4(0, 80, 4, 30));
+  private readonly penDepthUniform = uniform(30);
   private readonly deepDiagnosticsUniform = uniform(0, 'uint');
   private readonly goalScenarioUniform = uniform(0, 'uint');
   private readonly separationWeightUniform = uniform(SEPARATION_WEIGHT);
@@ -310,6 +313,11 @@ export class GpuBoidSystem {
     this.goalCenterRadiusUniform.value.set(center.x, center.y, center.z, Math.max(0, radius));
   }
 
+  setGate(center: THREE.Vector3, width: number, penHalfWidth: number, penDepth: number): void {
+    this.gatePenUniform.value.set(center.x, center.z, Math.max(1, width * 0.5), Math.max(2, penHalfWidth));
+    this.penDepthUniform.value = Math.max(4, penDepth);
+  }
+
   setDeepDiagnostics(enabled: boolean): void {
     this.deepDiagnosticsUniform.value = enabled ? 1 : 0;
   }
@@ -352,6 +360,7 @@ export class GpuBoidSystem {
     return {
       position: this.positionRead.toAttribute().xyz,
       velocity: this.currentVelocityRead.toAttribute().xyz,
+      state: this.positionRead.toAttribute().w,
     };
   }
 
@@ -520,6 +529,7 @@ export class GpuBoidSystem {
   private createCountPass(count: number): ComputeNode {
     return Fn(() => {
       const position = this.positionRead.element(instanceIndex);
+      If(position.w.lessThan(0.5), () => Return());
       const gridDimension = this.gridDimensionUniform;
       const boundedX = position.x.clamp(
         this.worldExtentUniform.negate(),
@@ -555,6 +565,7 @@ export class GpuBoidSystem {
     const scanResult = this.scanResultRead;
     return Fn(() => {
       const position = this.positionRead.element(instanceIndex);
+      If(position.w.lessThan(0.5), () => Return());
       const gridDimension = this.gridDimensionUniform;
       const boundedX = position.x.clamp(
         this.worldExtentUniform.negate(),
@@ -585,6 +596,10 @@ export class GpuBoidSystem {
       const selfIndex = instanceIndex;
       const position = this.positionRead.element(selfIndex);
       const velocity = this.currentVelocityRead.element(selfIndex);
+      If(position.w.lessThan(0.5), () => {
+        this.nextVelocityWrite.element(selfIndex).assign(vec4(0, 0, 0, 0));
+        Return();
+      });
       const gridDimension = this.gridDimensionUniform;
       const boundedX = position.x.clamp(
         this.worldExtentUniform.negate(),
@@ -736,7 +751,11 @@ export class GpuBoidSystem {
           innerBoundary.negate().sub(position.x).div(this.boundaryMarginUniform).mul(this.boundaryStrengthUniform),
         );
       });
-      If(position.z.greaterThan(innerBoundary), () => {
+      const insideGateLane = position.x
+        .sub(this.gatePenUniform.x)
+        .abs()
+        .lessThan(this.gatePenUniform.z);
+      If(position.z.greaterThan(innerBoundary).and(insideGateLane.not()), () => {
         acceleration.z.subAssign(
           position.z.sub(innerBoundary).div(this.boundaryMarginUniform).mul(this.boundaryStrengthUniform),
         );
@@ -789,9 +808,10 @@ export class GpuBoidSystem {
   private createIntegratePass(count: number): ComputeNode {
     return Fn(() => {
       const index = instanceIndex;
-      const position = this.positionWrite.element(index).xyz.toVar();
+      const position = this.positionWrite.element(index).toVar();
       const velocity = this.nextVelocityRead.element(index).xyz.toVar();
-      position.addAssign(velocity.mul(this.deltaUniform));
+      If(position.w.lessThan(0.5), () => Return());
+      position.xyz.addAssign(velocity.mul(this.deltaUniform));
 
       If(position.x.greaterThan(this.worldExtentUniform), () => {
         position.x.assign(this.worldExtentUniform);
@@ -801,7 +821,11 @@ export class GpuBoidSystem {
         position.x.assign(this.worldExtentUniform.negate());
         velocity.x.mulAssign(-0.55);
       });
-      If(position.z.greaterThan(this.worldExtentUniform), () => {
+      const insideGateLane = position.x
+        .sub(this.gatePenUniform.x)
+        .abs()
+        .lessThan(this.gatePenUniform.z);
+      If(position.z.greaterThan(this.worldExtentUniform).and(insideGateLane.not()), () => {
         position.z.assign(this.worldExtentUniform);
         velocity.z.mulAssign(-0.55);
       });
@@ -810,9 +834,34 @@ export class GpuBoidSystem {
         velocity.z.mulAssign(-0.55);
       });
 
+      If(
+        position.z
+          .greaterThan(this.gatePenUniform.y.add(1))
+          .and(insideGateLane),
+        () => {
+          const columns = uint(512);
+          const column = index.mod(columns);
+          const row = index.div(columns);
+          const rowCount = float(Math.max(2, Math.ceil(count / 512)));
+          const penWidth = this.gatePenUniform.w.mul(2).sub(2);
+          position.x.assign(
+            this.gatePenUniform.x
+              .sub(this.gatePenUniform.w)
+              .add(1)
+              .add(float(column).div(511).mul(penWidth)),
+          );
+          position.z.assign(
+            this.gatePenUniform.y
+              .add(2)
+              .add(float(row).div(rowCount.sub(1)).mul(this.penDepthUniform.sub(4))),
+          );
+          position.w.assign(0);
+          velocity.assign(vec3(0));
+        },
+      );
       this.positionWrite
         .element(index)
-        .assign(vec4(position.x, float(0.24), position.z, float(1)));
+        .assign(vec4(position.x, float(0.24), position.z, position.w));
       this.currentVelocityWrite
         .element(index)
         .assign(vec4(velocity.x, float(0), velocity.z, float(0)));
@@ -822,9 +871,7 @@ export class GpuBoidSystem {
   private createObjectivePass(count: number): ComputeNode {
     return Fn(() => {
       const position = this.positionRead.element(instanceIndex);
-      const offset = position.xyz.sub(this.goalCenterRadiusUniform.xyz);
-      const radiusSquared = this.goalCenterRadiusUniform.w.mul(this.goalCenterRadiusUniform.w);
-      If(offset.dot(offset).lessThanEqual(radiusSquared), () => {
+      If(position.w.lessThan(0.5), () => {
         atomicAdd(this.metricAtomic.element(uint(METRIC_INDEX.goalCount)), uint(1));
       });
     })().compute(count, [COMPUTE_WORKGROUP_SIZE]);
@@ -860,12 +907,10 @@ export class GpuBoidSystem {
         direction = random() * TAU;
         speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * random();
       } else {
-        const positionAngle = random() * TAU;
-        const goalRadius = Math.max(1, this.goalCenterRadiusUniform.value.w);
-        const radius = Math.sqrt(random()) * goalRadius * 0.82;
-        x = this.goalCenterRadiusUniform.value.x + Math.cos(positionAngle) * radius;
-        z = this.goalCenterRadiusUniform.value.z + Math.sin(positionAngle) * radius;
-        direction = random() * TAU;
+        x = this.gatePenUniform.value.x
+          + (random() * 2 - 1) * this.gatePenUniform.value.z * 0.8;
+        z = this.gatePenUniform.value.y + 1.25;
+        direction = Math.PI / 2;
         speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * random();
       }
 

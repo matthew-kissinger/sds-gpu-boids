@@ -21,6 +21,7 @@ export type HudState = {
   readbackState: string;
   status: string;
   adapter: string;
+  camera: { mode: 'follow' | 'orbit' | 'classic'; distance: number };
 };
 
 export type HudCallbacks = {
@@ -29,6 +30,7 @@ export type HudCallbacks = {
   onPause: () => void;
   onRestart: () => void;
   onMute: () => boolean;
+  onCamera: () => 'follow' | 'orbit' | 'classic';
 };
 
 export const HUD_EVENT_NAMES = {
@@ -58,6 +60,7 @@ export class Hud {
   private readonly pauseButton = this.getElement<HTMLButtonElement>('#pause-button');
   private readonly restartButton = this.getElement<HTMLButtonElement>('#restart-button');
   private readonly muteButton = this.getElement<HTMLButtonElement>('#mute-button');
+  private readonly cameraButton = this.getElement<HTMLButtonElement>('#camera-button');
   private readonly metricsToggle = this.getElement<HTMLButtonElement>('#metrics-toggle');
   private readonly metricsPanel = this.getElement('#metrics-panel');
   private readonly barkButton = this.getElement<HTMLButtonElement>('#bark-button');
@@ -107,6 +110,10 @@ export class Hud {
     this.muteButton.setAttribute('aria-label', muted ? 'Unmute audio' : 'Mute audio');
   };
 
+  private readonly onCamera = (): void => {
+    this.callbacks.onCamera?.();
+  };
+
   private readonly onOverlayPrimary = (): void => {
     if (this.overlayState === 'paused') this.onPause();
     else if (this.overlayState === 'won' || this.overlayState === 'error') this.onRestart();
@@ -119,6 +126,7 @@ export class Hud {
     this.pauseButton.addEventListener('click', this.onPause);
     this.restartButton.addEventListener('click', this.onRestart);
     this.muteButton.addEventListener('click', this.onMute);
+    this.cameraButton.addEventListener('click', this.onCamera);
     this.metricsToggle.addEventListener('click', this.onMetricsToggle);
     this.overlayPrimary.addEventListener('click', this.onOverlayPrimary);
     this.overlaySecondary.addEventListener('click', this.onRestart);
@@ -140,6 +148,8 @@ export class Hud {
     this.setText(this.truncationValue, Math.max(0, state.truncations).toLocaleString());
     this.setText(this.readbackValue, state.readbackState);
     this.setAdapter(state.adapter);
+    this.cameraButton.textContent = state.camera.mode === 'follow' ? 'FOLLOW' : state.camera.mode === 'orbit' ? 'ORBIT' : 'TOP';
+    this.cameraButton.title = `${state.camera.mode} camera - ${Math.round(state.camera.distance)}m (C to cycle)`;
 
     this.setMeter(this.goalMeterFill, state.goalPercent / 100, state.goalPercent);
     this.setMeter(this.holdMeterFill, state.holdProgress, state.holdProgress * 100);
@@ -196,6 +206,7 @@ export class Hud {
     this.pauseButton.removeEventListener('click', this.onPause);
     this.restartButton.removeEventListener('click', this.onRestart);
     this.muteButton.removeEventListener('click', this.onMute);
+    this.cameraButton.removeEventListener('click', this.onCamera);
     this.metricsToggle.removeEventListener('click', this.onMetricsToggle);
     this.overlayPrimary.removeEventListener('click', this.onOverlayPrimary);
     this.overlaySecondary.removeEventListener('click', this.onRestart);

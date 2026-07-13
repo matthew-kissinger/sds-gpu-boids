@@ -11,6 +11,16 @@ export type GoalDefinition = {
   radius: number;
 };
 
+export type GateDefinition = {
+  position: THREE.Vector2;
+  width: number;
+};
+
+export type PenDefinition = {
+  halfWidth: number;
+  depth: number;
+};
+
 type TreePlacement = {
   x: number;
   z: number;
@@ -49,6 +59,14 @@ export class World {
     center: new THREE.Vector2(),
     radius: 38,
   };
+  readonly gate: GateDefinition = {
+    position: new THREE.Vector2(),
+    width: 22,
+  };
+  readonly pen: PenDefinition = {
+    halfWidth: 60,
+    depth: 60,
+  };
 
   private readonly loader = createHomeFieldLoader();
   private readonly floorTexture = this.createFloorTexture();
@@ -62,8 +80,8 @@ export class World {
     }),
   );
   private readonly goalFill = new THREE.Mesh(
-    new THREE.CircleGeometry(1, 64),
-    new THREE.MeshBasicMaterial({ color: '#d7b35b', transparent: true, opacity: 0.12, depthWrite: false }),
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ color: '#d7b35b', transparent: true, opacity: 0.1, depthWrite: false }),
   );
   private readonly goalRing = new THREE.Mesh(
     new THREE.RingGeometry(0.965, 1, 96),
@@ -145,20 +163,24 @@ export class World {
     this.floor.scale.set(terrainSpan, terrainSpan, 1);
     this.floorTexture.repeat.set(Math.max(16, terrainSpan / 7), Math.max(16, terrainSpan / 7));
 
-    this.goal.radius = Math.max(34, extent * 0.2);
-    this.goal.center.set(0, extent * 0.66);
+    this.gate.width = Math.max(18, extent * 0.1);
+    this.gate.position.set(0, extent);
+    this.pen.halfWidth = Math.max(52, extent * 0.28);
+    this.pen.depth = Math.max(54, extent * 0.27);
+    this.goal.radius = this.pen.halfWidth;
+    this.goal.center.set(0, extent + this.pen.depth * 0.5);
     this.goalFill.position.set(this.goal.center.x, 0.025, this.goal.center.y);
-    this.goalRing.position.set(this.goal.center.x, 0.045, this.goal.center.y);
-    this.goalBeacon.position.set(this.goal.center.x, 36, this.goal.center.y);
-    this.goalCrown.position.set(this.goal.center.x, 48, this.goal.center.y);
-    this.goalFill.scale.setScalar(this.goal.radius);
-    this.goalRing.scale.setScalar(this.goal.radius);
+    this.goalRing.position.set(this.gate.position.x, 0.045, this.gate.position.y);
+    this.goalBeacon.position.set(this.gate.position.x, 36, this.gate.position.y + 4);
+    this.goalCrown.position.set(this.gate.position.x, 48, this.gate.position.y + 4);
+    this.goalFill.scale.set(this.pen.halfWidth * 2, this.pen.depth, 1);
+    this.goalRing.scale.setScalar(this.gate.width * 0.62);
     this.scatterGrass();
   }
 
   update(elapsed: number, holdProgress: number): void {
     const pulse = 1 + Math.sin(elapsed * 2.1) * 0.012 + holdProgress * 0.035;
-    this.goalRing.scale.setScalar(this.goal.radius * pulse);
+    this.goalRing.scale.setScalar(this.gate.width * 0.62 * pulse);
     const material = this.goalRing.material as THREE.MeshBasicMaterial;
     material.opacity = 0.48 + holdProgress * 0.42;
     this.goalCrown.rotation.z = elapsed * 0.24;
@@ -187,10 +209,12 @@ export class World {
   }
 
   private addFarmstead(models: Map<HomeFieldModelKey, GLTF>): void {
+    const farmX = this.extent + 90;
+    const farmZ = this.extent + 30;
     const farmhouse = models.get('farmhouse');
     if (farmhouse) {
       const house = farmhouse.scene.clone(true);
-      house.position.set(this.extent * 0.82, 0, this.extent * 0.75);
+      house.position.set(farmX, 0, farmZ);
       house.rotation.y = Math.PI * 1.25;
       this.prepareStaticModel(house);
       this.assetLayer.add(house);
@@ -202,7 +226,11 @@ export class World {
       if (!gltf) continue;
       const prop = gltf.scene.clone(true);
       this.fitToGroundHeight(prop, placement.height ?? 1);
-      prop.position.set(this.extent * placement.x, 0, this.extent * placement.z);
+      prop.position.set(
+        farmX + (placement.x - 0.78) * 180,
+        0,
+        farmZ + (placement.z - 0.72) * 160,
+      );
       prop.rotation.y = placement.rotation;
       this.prepareStaticModel(prop);
       this.assetLayer.add(prop);
@@ -211,11 +239,20 @@ export class World {
   }
 
   private addTreeLine(models: Map<HomeFieldModelKey, GLTF>, source: TreePlacement[]): void {
-    const scaleFactor = (this.extent * 1.42) / 240;
+    const scaleFactor = this.extent / 100;
     for (const type of ['tree1', 'tree2'] as const) {
       const gltf = models.get(type);
       if (!gltf) continue;
-      const placements = source.filter((placement) => placement.type === type);
+      const placements = source.filter((placement) => {
+        if (placement.type !== type) return false;
+        const x = placement.x * scaleFactor;
+        const z = placement.z * scaleFactor;
+        const insideField = Math.abs(x) <= this.extent + 6 && Math.abs(z) <= this.extent + 6;
+        const blocksPen = Math.abs(x) < this.pen.halfWidth + 28
+          && z > this.extent - 18
+          && z < this.extent + this.pen.depth + 30;
+        return !insideField && !blocksPen;
+      });
       this.addInstancedGltf(gltf, placements.map((placement) => {
         const matrix = new THREE.Matrix4();
         const position = new THREE.Vector3(placement.x * scaleFactor, 0, placement.z * scaleFactor);
@@ -255,51 +292,50 @@ export class World {
     const rail = this.findMesh(fence.scene, 'Mesh_Fence_Rail_Runtime');
     if (!post || !rail) return;
 
-    const spacing = 8;
+    const spacing = 5;
     const postMatrices: THREE.Matrix4[] = [];
     const railMatrices: THREE.Matrix4[] = [];
-    const addFenceLine = (start: THREE.Vector3, end: THREE.Vector3, openCenter = false): void => {
+    const addFenceLine = (start: THREE.Vector3, end: THREE.Vector3): void => {
       const distance = start.distanceTo(end);
       const count = Math.max(1, Math.ceil(distance / spacing));
       const direction = end.clone().sub(start);
-      const angle = Math.atan2(direction.x, direction.z);
+      const angle = -Math.atan2(direction.z, direction.x);
       for (let index = 0; index <= count; index += 1) {
         const t = index / count;
-        if (openCenter && Math.abs(t - 0.5) < 0.055) continue;
         const position = start.clone().lerp(end, t);
-        postMatrices.push(new THREE.Matrix4().compose(position, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), new THREE.Vector3(1.65, 1.65, 1.65)));
+        postMatrices.push(new THREE.Matrix4().compose(position, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), new THREE.Vector3(1, 1, 1)));
         if (index < count) {
           const next = start.clone().lerp(end, (index + 1) / count);
           const center = position.clone().lerp(next, 0.5);
           const length = position.distanceTo(next);
-          for (const y of [0.72, 1.62]) {
-            railMatrices.push(new THREE.Matrix4().compose(new THREE.Vector3(center.x, y, center.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), new THREE.Vector3(1.45, 1.45, length * 0.82)));
+          for (const y of [0.5, 1.2, 1.9]) {
+            railMatrices.push(new THREE.Matrix4().compose(new THREE.Vector3(center.x, y, center.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle), new THREE.Vector3(length, 1, 1)));
           }
         }
       }
     };
 
     const e = this.extent;
+    const halfGate = this.gate.width * 0.5;
+    const halfPen = this.pen.halfWidth;
+    const penBack = e + this.pen.depth;
     addFenceLine(new THREE.Vector3(-e, 0, -e), new THREE.Vector3(e, 0, -e));
     addFenceLine(new THREE.Vector3(-e, 0, -e), new THREE.Vector3(-e, 0, e));
     addFenceLine(new THREE.Vector3(e, 0, -e), new THREE.Vector3(e, 0, e));
-    addFenceLine(new THREE.Vector3(-e, 0, e), new THREE.Vector3(e, 0, e), true);
-
-    const c = this.goal.center;
-    const r = this.goal.radius * 1.08;
-    addFenceLine(new THREE.Vector3(c.x - r, 0, c.y - r), new THREE.Vector3(c.x - r, 0, c.y + r));
-    addFenceLine(new THREE.Vector3(c.x + r, 0, c.y - r), new THREE.Vector3(c.x + r, 0, c.y + r));
-    addFenceLine(new THREE.Vector3(c.x - r, 0, c.y + r), new THREE.Vector3(c.x + r, 0, c.y + r));
-    addFenceLine(new THREE.Vector3(c.x - r, 0, c.y - r), new THREE.Vector3(c.x + r, 0, c.y - r), true);
+    addFenceLine(new THREE.Vector3(-e, 0, e), new THREE.Vector3(-halfGate, 0, e));
+    addFenceLine(new THREE.Vector3(halfGate, 0, e), new THREE.Vector3(e, 0, e));
+    addFenceLine(new THREE.Vector3(-halfPen, 0, e), new THREE.Vector3(-halfPen, 0, penBack));
+    addFenceLine(new THREE.Vector3(halfPen, 0, e), new THREE.Vector3(halfPen, 0, penBack));
+    addFenceLine(new THREE.Vector3(-halfPen, 0, penBack), new THREE.Vector3(halfPen, 0, penBack));
 
     this.addInstancedMesh(post, postMatrices, 'field-fence-posts');
     this.addInstancedMesh(rail, railMatrices, 'field-fence-rails');
 
     if (gate) {
-      const gateRoot = gate.scene.clone(true);
-      gateRoot.position.set(c.x, 0, c.y - r);
-      gateRoot.rotation.y = Math.PI;
-      gateRoot.scale.setScalar(1.65);
+      const source = gate.scene.getObjectByName('Gate_Assembly') ?? gate.scene;
+      const gateRoot = source.clone(true);
+      gateRoot.position.set(this.gate.position.x, 0, this.gate.position.y);
+      gateRoot.scale.setScalar(this.gate.width / 8);
       this.prepareStaticModel(gateRoot);
       this.perimeterLayer.add(gateRoot);
       this.disposableRoots.push(gateRoot);

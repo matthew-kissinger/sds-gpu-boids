@@ -38,6 +38,9 @@ The production preview runs at `http://127.0.0.1:4190`. Benchmarking defaults to
 
 - `WASD` or arrow keys: move the dog
 - `Space`: bark
+- Mouse/touch drag or `Q` / `E`: look around in free-orbit view
+- Mouse wheel or `+` / `-`: zoom
+- `C` or the camera HUD button: cycle follow, orbit, and classic overhead views
 - `P`: pause or resume
 - `R`: restart the current seed and workload
 - Touch stick: move on touch devices
@@ -48,7 +51,7 @@ The production preview runs at `http://127.0.0.1:4190`. Benchmarking defaults to
 
 Flock Lab changes the running compute simulation without a restart. It includes presets plus switches and sliders for separation, alignment, cohesion, awareness, personal space, speed limits, boundaries, dog speed/pressure, bark pressure, and optional goal attraction. `Copy` writes the current tuning as JSON.
 
-Herd enough sheep into the gold goal and hold them there to win. The `Goal demo` workload exists for objective-reduction QA; it is not a benchmark workload.
+Herd 60% of the flock through the centered north gate. Sheep that cross the threshold retire from flocking and take a place inside the attached pen. The `Goal demo` workload exists for retirement/objective QA; it is not a benchmark workload.
 
 ## Starting layouts
 

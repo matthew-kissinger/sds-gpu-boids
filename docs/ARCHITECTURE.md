@@ -66,7 +66,7 @@ Pause stops fixed-step advancement while rendering and UI remain responsive. Res
 
 ## Objective
 
-The GPU counts sheep inside the goal during simulation. JavaScript receives only the reduced scalar result at a controlled cadence. The CPU applies the hold timer and owns the paused and won states.
+The GPU opens the north boundary only inside the authored gate lane. Crossing that threshold changes the sheep's storage state from active to retired, removes it from later grid/flocking work, and assigns it a deterministic pen position. JavaScript receives only the reduced retired count at a controlled cadence; the CPU owns the paused and won states.
 
 ## Diagnostics contract
 

@@ -13,8 +13,16 @@ type Diagnostics = {
   };
   dog?: {
     position?: { x?: number; y?: number; z?: number };
+    forward?: { x?: number; z?: number };
+    rotationY?: number;
     barkStrength?: number;
     barkSequence?: number;
+  };
+  camera?: {
+    mode?: 'follow' | 'orbit' | 'classic';
+    distance?: number;
+    yaw?: number;
+    pitch?: number;
   };
   tuning?: {
     separationWeight?: number;
@@ -120,4 +128,52 @@ test('goal demo advances objective reduction through the win state', async ({ pa
     .toBeGreaterThan(0);
   await expect.poll(async () => (await diagnostics(page))?.status, { timeout: 30_000 }).toBe('won');
   await expect(page.locator('#game-overlay')).toHaveAttribute('data-state', 'won');
+});
+
+test('dog faces its direction of travel', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes('mobile'), 'Keyboard facing regression runs in the desktop project.');
+  const live = await openLiveRuntime(page, '/?count=1000&scenario=field');
+  test.skip(!live, 'This browser exercised the explicit unsupported-WebGPU path.');
+
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(350);
+  await page.keyboard.up('KeyW');
+  await expect.poll(async () => (await diagnostics(page))?.dog?.forward?.z ?? 0).toBeGreaterThan(0.9);
+
+  await page.reload();
+  expect(await openLiveRuntime(page, '/?count=1000&scenario=field')).toBe(true);
+  await page.keyboard.down('KeyA');
+  await page.waitForTimeout(850);
+  await page.keyboard.up('KeyA');
+  await expect.poll(async () => (await diagnostics(page))?.dog?.forward?.x ?? 0).toBeLessThan(-0.9);
+  expect((await diagnostics(page))?.dog?.rotationY ?? 0).toBeCloseTo(-Math.PI / 2, 1);
+});
+
+test('camera supports zoom, orbit look, and view cycling', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes('mobile'), 'Mouse and keyboard camera regression runs in desktop Chrome.');
+  const live = await openLiveRuntime(page, '/?count=1000&scenario=field');
+  test.skip(!live, 'This browser exercised the explicit unsupported-WebGPU path.');
+
+  const canvas = page.locator('canvas');
+  const initial = await diagnostics(page);
+  await canvas.hover();
+  await page.mouse.wheel(0, -600);
+  await expect.poll(async () => (await diagnostics(page))?.camera?.distance ?? 100)
+    .toBeLessThan(initial?.camera?.distance ?? 100);
+
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  if (box) {
+    await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.45);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.35, box.y + box.height * 0.35, { steps: 5 });
+    await page.mouse.up();
+  }
+  await expect.poll(async () => (await diagnostics(page))?.camera?.mode).toBe('orbit');
+  expect(Math.abs((await diagnostics(page))?.camera?.yaw ?? 0)).toBeGreaterThan(0.1);
+
+  await page.keyboard.press('KeyC');
+  await expect.poll(async () => (await diagnostics(page))?.camera?.mode).toBe('classic');
+  await page.keyboard.press('KeyC');
+  await expect.poll(async () => (await diagnostics(page))?.camera?.mode).toBe('follow');
 });

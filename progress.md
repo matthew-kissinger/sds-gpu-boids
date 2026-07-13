@@ -27,3 +27,14 @@ Original prompt: Build a standalone new Sheep Dog Simulator prototype that moves
 - Added shader uniforms for flock weights/radii/speeds, boundary behavior, dog pressure, bark pressure, and optional goal attraction.
 - Revalidated the independent CPU/GPU one-step oracle after the enlarged Home Field seed change.
 - Captured desktop/mobile game and tuning-drawer screenshots and completed a fresh 1k/100k production benchmark.
+
+## Home Field control and construction correction
+
+- Traced the production Home Field scene, FencePresets, OptimizedSheep, Sheepdog, placement manifest, and camera controller before changing the standalone prototype.
+- Rebuilt the 440-meter pasture as a closed square with a centered north opening, the authored Gate_Assembly, and an attached three-sided retirement pen made from the production fence post and rail meshes.
+- Corrected fence rail orientation/scaling and rescaled the production tree manifest to the enlarged field so trees remain outside the playable pasture and clear of the pen.
+- Replaced the flock render geometry with the production-style merged instanced sheep silhouette, including body, forward head, legs, eyes, pupils, glints, and nose at lower counts plus a reduced crowd LOD at 100,000.
+- Corrected both forward-axis bugs: sheep heads now align with GPU velocity and Jep's root now rotates once toward dog velocity instead of receiving a second 180-degree turn.
+- Added follow, free-orbit, and classic overhead camera views with wheel/plus-minus zoom, pointer drag, Q/E look, and C/HUD view cycling.
+- Implemented GPU-side gate crossing retirement: retired sheep leave compact-grid/flocking work, move into deterministic pen slots, and feed the retirement objective counter.
+- Added browser regressions for dog forward/left facing and zoom/orbit/view cycling, and captured a full south-to-north traversal showing the gate and pen without browser errors.

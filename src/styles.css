@@ -312,6 +312,12 @@ select:disabled {
   line-height: 1;
 }
 
+.camera-button {
+  flex-basis: 64px;
+  min-width: 64px;
+  font-size: 0.58rem;
+}
+
 #metrics-toggle[aria-expanded="true"] {
   border-color: var(--green);
   color: var(--green);

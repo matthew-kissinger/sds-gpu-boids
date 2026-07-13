@@ -4,16 +4,16 @@ Measured on 2026-07-13 using the production Vite preview at 1280 by 720, DPR 1, 
 
 ## Final Home Field benchmark
 
-Each case used a three-second warmup and eight-second measured window.
+The 1,000-sheep reference used a three-second warmup and eight-second measured window. The post-rebuild 100,000-sheep case used a three-second warmup and ten-second measured window.
 
 | Sheep | Frame p50 | Frame p95 | Median FPS | GPU compute | GPU render | Validity |
 |---:|---:|---:|---:|---:|---:|---|
 | 1,000 | 6.9 ms | 7.0 ms | 144.9 | 0.07 ms | 0.17 ms | Exact neighborhood |
-| 100,000 | 6.9 ms | 7.0 ms | 144.9 | 2.89 ms | 3.21 ms | 32,944 sheep candidate-capped at the final sample |
+| 100,000 | 6.9 ms | 7.1 ms | 144.9 | 2.02 ms | 4.41 ms | 37,219 sheep candidate-capped at the final sample |
 
 The final 100,000-sheep case advanced simulation in real time with no invalid indices or measured dropped steps and cleared the runner's 60 Hz gate on this machine. It does not certify 60 Hz on inexpensive hardware.
 
-The final sheep mesh costs 130 triangles per sheep (13 million triangles at 100,000) and the complete flock is submitted as one instanced draw.
+The 100,000-sheep crowd LOD costs 140 triangles per sheep (14 million triangles total) and the complete flock is submitted as one instanced draw.
 
 ## Correctness
 

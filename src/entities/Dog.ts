@@ -49,7 +49,7 @@ export const DEFAULT_DOG_TUNING: DogTuning = {
 export class Dog {
   readonly group = new THREE.Group();
   readonly velocity = new THREE.Vector3();
-  readonly forward = new THREE.Vector3(0, 0, -1);
+  readonly forward = new THREE.Vector3(0, 0, 1);
 
   barkStrength = 0;
   barkRadius = 0;
@@ -172,7 +172,7 @@ export class Dog {
     this.importedModel = gltf.scene;
     this.importedModel.name = 'Jep - Home Field sheepdog';
     this.importedModel.scale.setScalar(3.2);
-    this.importedModel.rotation.y = Math.PI;
+    this.importedModel.rotation.y = 0;
     this.importedModel.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
       object.castShadow = true;
@@ -218,14 +218,14 @@ export class Dog {
 
     const speedSquared = this.velocity.lengthSq();
     if (speedSquared > 0.01) {
-      const targetHeading = Math.atan2(this.velocity.x, -this.velocity.z);
+      const targetHeading = Math.atan2(this.velocity.x, this.velocity.z);
       const headingDelta = Math.atan2(
         Math.sin(targetHeading - this.group.rotation.y),
         Math.cos(targetHeading - this.group.rotation.y),
       );
       const turnBlend = 1 - Math.exp(-this.tuning.turnResponsiveness * delta);
       this.group.rotation.y += headingDelta * turnBlend;
-      this.forward.set(Math.sin(this.group.rotation.y), 0, -Math.cos(this.group.rotation.y));
+      this.forward.set(Math.sin(this.group.rotation.y), 0, Math.cos(this.group.rotation.y));
     }
 
     const speedRatio = Math.min(1, Math.sqrt(speedSquared) / this.tuning.maxSpeed);
@@ -304,7 +304,7 @@ export class Dog {
     this.group.rotation.set(0, 0, 0);
     this.velocity.set(0, 0, 0);
     this.targetVelocity.set(0, 0, 0);
-    this.forward.set(0, 0, -1);
+    this.forward.set(0, 0, 1);
     this.barkStrength = 0;
     this.barkRadius = 0;
     this.barkAge = Infinity;

@@ -44,7 +44,7 @@ export class Game {
   private readonly world: World;
   private readonly dog = new Dog();
   private readonly input: InputController;
-  private readonly cameraRig = new CameraRig(this.camera);
+  private readonly cameraRig: CameraRig;
   private readonly hud: Hud;
   private readonly audio = new AudioSystem();
   private readonly tuningPanel: TuningPanel;
@@ -86,6 +86,7 @@ export class Game {
     this.renderer = bundle.renderer;
     this.capability = bundle.capability;
     this.adapterLabel = this.formatAdapter(bundle);
+    this.cameraRig = new CameraRig(this.camera, canvas);
     this.scene.background = new THREE.Color('#b9d5e8');
     this.scene.fog = new THREE.Fog('#c9d9df', 330, 820);
 
@@ -107,6 +108,7 @@ export class Game {
       onPause: () => this.togglePause(),
       onRestart: () => this.restart(),
       onMute: () => this.audio.toggleMute(),
+      onCamera: () => this.cameraRig.cycleMode(),
     });
     this.tuningPanel = new TuningPanel((tuning) => this.applyTuning(tuning));
 
@@ -147,6 +149,7 @@ export class Game {
     this.input.dispose();
     this.hud.dispose();
     this.tuningPanel.dispose();
+    this.cameraRig.dispose();
     this.dog.dispose();
     this.flock.dispose();
     this.boids.dispose();
@@ -201,6 +204,10 @@ export class Game {
 
     if (this.input.consumePausePressed()) this.togglePause();
     if (this.input.consumeRestartPressed()) this.restart();
+    if (this.input.consumeCameraCyclePressed()) this.cameraRig.cycleMode();
+    this.cameraRig.zoomBy(this.input.consumeZoomDelta());
+    const orbitDirection = this.input.readOrbitDirection();
+    if (orbitDirection !== 0) this.cameraRig.orbitBy(orbitDirection * frame.deltaSeconds * 1.8);
 
     this.cameraRig.update(frame.deltaSeconds, this.dog.group.position, this.dog.velocity);
     const goalFraction = this.config.count > 0 ? this.goalCount / this.config.count : 0;
@@ -245,6 +252,12 @@ export class Game {
     this.world.configure(extent);
     this.goalPosition.set(this.world.goal.center.x, 0, this.world.goal.center.y);
     this.boids.setGoal(this.goalPosition, this.world.goal.radius);
+    this.boids.setGate(
+      new THREE.Vector3(this.world.gate.position.x, 0, this.world.gate.position.y),
+      this.world.gate.width,
+      this.world.pen.halfWidth,
+      this.world.pen.depth,
+    );
 
     if (reinitialize) {
       this.boids.reinitialize(this.config.count, this.config.scenario, this.config.seed, extent);
@@ -359,6 +372,7 @@ export class Game {
       readbackState: this.readbackState,
       status: this.statusText(goalPercent),
       adapter: this.adapterLabel,
+      camera: this.cameraRig.getState(),
     };
   }
 
@@ -385,7 +399,7 @@ export class Game {
     if (this.won) return 'Home Field secured - press R to herd again';
     if (this.paused) return 'Simulation paused';
     if (goalPercent >= GOAL_FRACTION * 100) return `Hold the flock - ${Math.round(this.holdProgress * 100)}%`;
-    return `Drive ${Math.round(GOAL_FRACTION * 100)}% through the gate and hold the pen`;
+    return `Retire ${Math.round(GOAL_FRACTION * 100)}% through the north gate`;
   }
 
   private publishDiagnostics(frame?: LoopFrame): void {
@@ -399,6 +413,8 @@ export class Game {
       dog: {
         position: { x: this.dog.group.position.x, y: this.dog.group.position.y, z: this.dog.group.position.z },
         velocity: { x: this.dog.velocity.x, y: this.dog.velocity.y, z: this.dog.velocity.z },
+        forward: { x: this.dog.forward.x, y: this.dog.forward.y, z: this.dog.forward.z },
+        rotationY: this.dog.group.rotation.y,
         barkSequence: this.dog.barkSequence,
         barkReadiness: this.dog.barkReadiness,
       },
@@ -457,6 +473,7 @@ export class Game {
       error: this.fatalError,
       assets: { homeField: this.world.loaded, dog: 'Jep.glb', sheep: 'SDS instanced sheep geometry' },
       tuning: { ...this.tuning },
+      camera: this.cameraRig.getState(),
     };
     window.__THREE_GAME_DIAGNOSTICS__ = diagnostics;
   }

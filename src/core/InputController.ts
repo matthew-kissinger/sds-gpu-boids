@@ -21,6 +21,13 @@ const GAME_KEYS = new Set([
   'Space',
   'KeyP',
   'KeyR',
+  'KeyC',
+  'KeyQ',
+  'KeyE',
+  'Equal',
+  'NumpadAdd',
+  'Minus',
+  'NumpadSubtract',
   'Escape',
 ]);
 
@@ -42,6 +49,8 @@ export class InputController {
   private barkPressed = false;
   private restartPressed = false;
   private pausePressed = false;
+  private cameraCyclePressed = false;
+  private zoomDelta = 0;
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     const isGlobalCommand = event.code === 'KeyR' || event.code === 'KeyP' || event.code === 'Escape';
@@ -58,6 +67,12 @@ export class InputController {
       this.restartPressed = true;
     } else if (event.code === 'KeyP' || event.code === 'Escape') {
       this.pausePressed = true;
+    } else if (event.code === 'KeyC') {
+      this.cameraCyclePressed = true;
+    } else if (event.code === 'Equal' || event.code === 'NumpadAdd') {
+      this.zoomDelta -= 5;
+    } else if (event.code === 'Minus' || event.code === 'NumpadSubtract') {
+      this.zoomDelta += 5;
     }
   };
 
@@ -164,8 +179,8 @@ export class InputController {
     this.keyVector.set(0, 0);
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) this.keyVector.x -= 1;
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) this.keyVector.x += 1;
-    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) this.keyVector.y -= 1;
-    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) this.keyVector.y += 1;
+    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) this.keyVector.y += 1;
+    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) this.keyVector.y -= 1;
 
     target.copy(this.keyVector).add(this.stickVector);
     if (target.lengthSq() > 1) target.normalize();
@@ -188,6 +203,22 @@ export class InputController {
     const pressed = this.pausePressed;
     this.pausePressed = false;
     return pressed;
+  }
+
+  consumeCameraCyclePressed(): boolean {
+    const pressed = this.cameraCyclePressed;
+    this.cameraCyclePressed = false;
+    return pressed;
+  }
+
+  consumeZoomDelta(): number {
+    const delta = this.zoomDelta;
+    this.zoomDelta = 0;
+    return delta;
+  }
+
+  readOrbitDirection(): number {
+    return (this.keys.has('KeyE') ? 1 : 0) - (this.keys.has('KeyQ') ? 1 : 0);
   }
 
   isBarkHeld(): boolean {
@@ -227,14 +258,14 @@ export class InputController {
   private updateStick(clientX: number, clientY: number): void {
     const dx = clientX - this.pointerState.centerX;
     const dy = clientY - this.pointerState.centerY;
-    this.stickVector.set(dx / this.pointerState.radius, dy / this.pointerState.radius);
+    this.stickVector.set(dx / this.pointerState.radius, -dy / this.pointerState.radius);
     if (this.stickVector.lengthSq() > 1) this.stickVector.normalize();
     this.updateKnob();
   }
 
   private updateKnob(): void {
     const x = this.stickVector.x * this.pointerState.knobTravel;
-    const y = this.stickVector.y * this.pointerState.knobTravel;
+    const y = -this.stickVector.y * this.pointerState.knobTravel;
     this.knob.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
   }
 

@@ -41,7 +41,9 @@ When WebGPU is ready, it exercises:
 - restart cleanup and seeded reset;
 - count rebuild;
 - workload rebuild;
-- goal-demo objective reduction and win state;
+- GPU gate-crossing retirement, objective reduction, and win state;
+- dog forward/left movement facing;
+- wheel zoom, pointer orbit, and three-view camera cycling;
 - console and uncaught page errors;
 - active-game screenshots and canvas color variance.
 
@@ -64,7 +66,7 @@ The inspector records canvas CSS size, drawing-buffer size, sampled color varian
 - `npm run build` passes.
 - Production preview is verified, not only the dev server.
 - The player can move and bark within five seconds.
-- The goal and hold state are legible.
+- The centered north gate, attached pen, and retired-count state are legible.
 - Pause, resume, and restart work after active simulation.
 - Desktop and mobile canvas checks are nonblank.
 - Renderer and grid diagnostics are captured.
