@@ -71,8 +71,8 @@ export class CameraRig {
     const cos = Math.cos(yaw);
     const sin = Math.sin(yaw);
     return target.set(
-      input.x * cos + input.y * sin,
-      -input.x * sin + input.y * cos,
+      -input.x * cos + input.y * sin,
+      input.x * sin + input.y * cos,
     );
   }
 
@@ -106,9 +106,8 @@ export class CameraRig {
     lagSeconds = 0.14,
   ): void {
     this.composeFocus(target, velocity);
-    this.composeCameraPosition(velocity);
-
     const delta = Math.min(Math.max(deltaSeconds, 0), 0.05);
+    this.composeCameraPosition(velocity, delta);
     const positionBlend = this.mode === 'orbit'
       ? 1 - Math.exp(-delta / 0.06)
       : 1 - Math.exp(-delta / Math.max(0.025, lagSeconds));
@@ -141,11 +140,12 @@ export class CameraRig {
     this.desiredFocus.y = 1.25;
   }
 
-  private composeCameraPosition(velocity: Readonly<THREE.Vector3>): void {
+  private composeCameraPosition(velocity: Readonly<THREE.Vector3>, deltaSeconds = 0): void {
     const speed = Math.hypot(velocity.x, velocity.z);
     if (speed > 0.1) {
       const targetYaw = Math.atan2(velocity.x, velocity.z);
-      this.followYaw = this.normalizeAngle(this.lerpAngle(this.followYaw, targetYaw, 0.16));
+      const yawBlend = deltaSeconds > 0 ? 1 - Math.exp(-deltaSeconds / 0.35) : 1;
+      this.followYaw = this.normalizeAngle(this.lerpAngle(this.followYaw, targetYaw, yawBlend));
     }
 
     const portraitLift = this.aspect < 1 ? THREE.MathUtils.lerp(1.08, 1.28, 1 - this.aspect) : 1;

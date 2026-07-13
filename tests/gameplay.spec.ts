@@ -157,8 +157,8 @@ test('dog movement stays screen-relative and turns smoothly', async ({ page }, t
   const after = position(await diagnostics(page));
   const displacementX = after.x - before.x;
   const displacementZ = after.z - before.z;
-  const screenRightX = Math.cos(yaw);
-  const screenRightZ = -Math.sin(yaw);
+  const screenRightX = -Math.cos(yaw);
+  const screenRightZ = Math.sin(yaw);
   expect(displacementX * screenRightX + displacementZ * screenRightZ).toBeLessThan(-0.5);
 
   const turnSteps = rotations.slice(1).map((rotation, index) => Math.abs(Math.atan2(
@@ -188,7 +188,7 @@ test('up down left and right follow the active camera axes', async ({ page }, te
     const end = position(await diagnostics(page));
     return {
       forward: (end.x - start.x) * Math.sin(yaw) + (end.z - start.z) * Math.cos(yaw),
-      right: (end.x - start.x) * Math.cos(yaw) - (end.z - start.z) * Math.sin(yaw),
+      right: (end.x - start.x) * -Math.cos(yaw) + (end.z - start.z) * Math.sin(yaw),
     };
   };
 
@@ -196,6 +196,26 @@ test('up down left and right follow the active camera axes', async ({ page }, te
   expect((await measure('KeyS')).forward).toBeLessThan(-0.5);
   expect((await measure('KeyA')).right).toBeLessThan(-0.5);
   expect((await measure('KeyD')).right).toBeGreaterThan(0.5);
+});
+
+test('follow camera preserves immediate left and right steering', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes('mobile'), 'Keyboard follow-steering coverage runs in desktop Chrome.');
+
+  expect(await openLiveRuntime(page, '/?count=1000&scenario=field')).toBe(true);
+  const rightStart = position(await diagnostics(page));
+  await page.keyboard.down('KeyD');
+  await page.waitForTimeout(180);
+  await page.keyboard.up('KeyD');
+  const rightEnd = position(await diagnostics(page));
+  expect(rightEnd.x - rightStart.x).toBeLessThan(-0.4);
+
+  expect(await openLiveRuntime(page, '/?count=1000&scenario=field')).toBe(true);
+  const leftStart = position(await diagnostics(page));
+  await page.keyboard.down('KeyA');
+  await page.waitForTimeout(180);
+  await page.keyboard.up('KeyA');
+  const leftEnd = position(await diagnostics(page));
+  expect(leftEnd.x - leftStart.x).toBeGreaterThan(0.4);
 });
 
 test('camera supports zoom, orbit look, and view cycling', async ({ page }, testInfo) => {

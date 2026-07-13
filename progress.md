@@ -48,3 +48,5 @@ Original prompt: Build a standalone new Sheep Dog Simulator prototype that moves
 - Removed the spike-grass instances, retaining the textured meadow surface with no extra grass draw.
 - Applied the production rock asset's 0.2-meter native-height normalization before instancing so rocks sit on the ground at believable scale outside the fence.
 - Preserved the existing count ladder and added 125k, 150k, 200k, 300k, and 500k stress tiers with GPU storage sized to 500,000 sheep.
+- Corrected the final lateral camera-basis sign: Three.js camera screen-right is `forward x up`, so D now follows visible screen-right and A visible screen-left in every camera mode.
+- Replaced Follow camera's refresh-rate-dependent `0.16` yaw blend with a 0.35-second exponential lag; this prevents high-refresh feedback from spinning the camera and remapping lateral input within a few frames.
