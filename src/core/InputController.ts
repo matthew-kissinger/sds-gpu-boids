@@ -131,7 +131,9 @@ export class InputController {
   };
 
   private readonly onVisibilityChange = (): void => {
-    if (document.visibilityState !== 'visible') this.resetHeldInput();
+    if (document.visibilityState !== 'visible') {
+      this.resetHeldInput();
+    }
   };
 
   constructor(
@@ -139,8 +141,8 @@ export class InputController {
     private readonly knob: HTMLElement,
     private readonly barkButton: HTMLElement,
   ) {
-    window.addEventListener('keydown', this.onKeyDown, { passive: false });
-    window.addEventListener('keyup', this.onKeyUp);
+    document.addEventListener('keydown', this.onKeyDown, { passive: false, capture: true });
+    document.addEventListener('keyup', this.onKeyUp, { capture: true });
     window.addEventListener('blur', this.onWindowBlur);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
 
@@ -192,9 +194,17 @@ export class InputController {
     return this.barkHeld;
   }
 
+  getDebugState(): { keys: string[]; movement: { x: number; y: number } } {
+    this.readMovement(this.keyVector);
+    return {
+      keys: Array.from(this.keys).sort(),
+      movement: { x: this.keyVector.x, y: this.keyVector.y },
+    };
+  }
+
   dispose(): void {
-    window.removeEventListener('keydown', this.onKeyDown);
-    window.removeEventListener('keyup', this.onKeyUp);
+    document.removeEventListener('keydown', this.onKeyDown, { capture: true });
+    document.removeEventListener('keyup', this.onKeyUp, { capture: true });
     window.removeEventListener('blur', this.onWindowBlur);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
 

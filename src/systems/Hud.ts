@@ -28,6 +28,7 @@ export type HudCallbacks = {
   onScenarioChange: (scenario: SimulationScenario) => void;
   onPause: () => void;
   onRestart: () => void;
+  onMute: () => boolean;
 };
 
 export const HUD_EVENT_NAMES = {
@@ -56,6 +57,7 @@ export class Hud {
   private readonly scenarioSelect = this.getElement<HTMLSelectElement>('#scenario-select');
   private readonly pauseButton = this.getElement<HTMLButtonElement>('#pause-button');
   private readonly restartButton = this.getElement<HTMLButtonElement>('#restart-button');
+  private readonly muteButton = this.getElement<HTMLButtonElement>('#mute-button');
   private readonly metricsToggle = this.getElement<HTMLButtonElement>('#metrics-toggle');
   private readonly metricsPanel = this.getElement('#metrics-panel');
   private readonly barkButton = this.getElement<HTMLButtonElement>('#bark-button');
@@ -98,6 +100,13 @@ export class Hud {
     this.metricsPanel.hidden = expanded;
   };
 
+  private readonly onMute = (): void => {
+    const muted = this.callbacks.onMute?.() ?? false;
+    this.muteButton.dataset.muted = String(muted);
+    this.muteButton.textContent = muted ? 'OFF' : 'SFX';
+    this.muteButton.setAttribute('aria-label', muted ? 'Unmute audio' : 'Mute audio');
+  };
+
   private readonly onOverlayPrimary = (): void => {
     if (this.overlayState === 'paused') this.onPause();
     else if (this.overlayState === 'won' || this.overlayState === 'error') this.onRestart();
@@ -109,6 +118,7 @@ export class Hud {
     this.scenarioSelect.addEventListener('change', this.onScenarioChange);
     this.pauseButton.addEventListener('click', this.onPause);
     this.restartButton.addEventListener('click', this.onRestart);
+    this.muteButton.addEventListener('click', this.onMute);
     this.metricsToggle.addEventListener('click', this.onMetricsToggle);
     this.overlayPrimary.addEventListener('click', this.onOverlayPrimary);
     this.overlaySecondary.addEventListener('click', this.onRestart);
@@ -185,6 +195,7 @@ export class Hud {
     this.scenarioSelect.removeEventListener('change', this.onScenarioChange);
     this.pauseButton.removeEventListener('click', this.onPause);
     this.restartButton.removeEventListener('click', this.onRestart);
+    this.muteButton.removeEventListener('click', this.onMute);
     this.metricsToggle.removeEventListener('click', this.onMetricsToggle);
     this.overlayPrimary.removeEventListener('click', this.onOverlayPrimary);
     this.overlaySecondary.removeEventListener('click', this.onRestart);
@@ -205,16 +216,16 @@ export class Hud {
       this.overlayPrimary.hidden = true;
       this.overlaySecondary.hidden = true;
     } else if (state === 'paused') {
-      this.setText(this.overlayKicker, 'SIMULATION HELD');
-      this.setText(this.overlayTitle, 'Paused');
-      this.setText(this.overlayBody, 'The flock state is preserved on the GPU.');
+      this.setText(this.overlayKicker, 'HOME FIELD');
+      this.setText(this.overlayTitle, 'Taking a breather');
+      this.setText(this.overlayBody, 'Jep and every sheep are waiting exactly where you left them.');
       this.setText(this.overlayPrimary, 'Resume');
       this.overlayPrimary.hidden = false;
       this.overlaySecondary.hidden = false;
     } else if (state === 'won') {
-      this.setText(this.overlayKicker, 'TARGET SECURED');
-      this.setText(this.overlayTitle, 'Flock held');
-      this.setText(this.overlayBody, 'The sheep remained inside the goal long enough to complete the run.');
+      this.setText(this.overlayKicker, 'HOME FIELD COMPLETE');
+      this.setText(this.overlayTitle, 'Flock secured');
+      this.setText(this.overlayBody, 'Jep held the flock safely inside the north pen.');
       this.setText(this.overlayPrimary, 'Run again');
       this.overlayPrimary.hidden = false;
       this.overlaySecondary.hidden = true;

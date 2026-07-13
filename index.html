@@ -9,7 +9,7 @@
       name="description"
       content="A standalone WebGPU compute prototype for large interactive sheep flocks."
     />
-    <title>GPU Flock Lab - Sheep Dog Prototype</title>
+    <title>Home Field 100K - Sheep Dog Simulator</title>
   </head>
   <body>
     <main id="app">
@@ -18,8 +18,8 @@
       <header id="hud" aria-label="Game status">
         <section class="objective-cluster" aria-label="Herding objective">
           <div class="prototype-mark">
-            <span class="prototype-mark__eyebrow">GPU FLOCK LAB</span>
-            <strong>Herd into the amber ground</strong>
+            <span class="prototype-mark__eyebrow">SHEEP DOG SIMULATOR</span>
+            <strong>Home Field 100K</strong>
           </div>
 
           <div class="flock-count">
@@ -29,7 +29,7 @@
 
           <div class="objective-progress">
             <div class="objective-progress__line">
-              <span>IN GOAL</span>
+              <span>SHEEP IN PEN</span>
               <strong id="goal-percent">0%</strong>
             </div>
             <div
@@ -43,7 +43,7 @@
               <span id="goal-meter-fill" class="meter__fill"></span>
             </div>
             <div class="objective-progress__line objective-progress__line--hold">
-              <span>HOLD TO SECURE</span>
+              <span>HOLD THE FLOCK</span>
             </div>
             <div
               class="meter meter--hold"
@@ -68,7 +68,7 @@
             <strong id="p95-value">0.0 ms</strong>
           </div>
           <button id="metrics-toggle" class="icon-button" type="button" aria-expanded="false" aria-controls="metrics-panel">
-            SIM
+            GPU
           </button>
         </section>
 
@@ -88,14 +88,16 @@
             </select>
           </label>
           <label>
-            <span>LAYOUT</span>
+            <span>START</span>
             <select id="scenario-select" aria-label="Starting flock layout">
-              <option value="constant">Constant density</option>
-              <option value="field">Open field</option>
-              <option value="herd">Herding pressure</option>
-              <option value="goal">Goal challenge</option>
+              <option value="field">Home Field scatter</option>
+              <option value="herd">Tight flock</option>
+              <option value="goal">Pen preview</option>
+              <option value="constant">Benchmark spread</option>
             </select>
           </label>
+          <button id="tuning-toggle" class="icon-button" type="button" aria-expanded="false" aria-controls="tuning-panel" title="Tune flock behavior">TUNE</button>
+          <button id="mute-button" class="icon-button" type="button" aria-label="Mute audio" title="Mute audio">SFX</button>
           <button id="pause-button" class="icon-button" type="button" aria-label="Pause simulation" title="Pause (P)">
             <span aria-hidden="true">II</span>
           </button>
@@ -125,6 +127,44 @@
         </section>
       </header>
 
+      <aside id="tuning-panel" class="tuning-panel" aria-label="Live flock behavior tuning" hidden>
+        <div class="tuning-panel__head">
+          <div><span>GPU BEHAVIOR</span><strong>Flock Lab</strong></div>
+          <button id="tuning-copy" type="button">COPY</button>
+          <button id="tuning-reset" type="button">RESET</button>
+        </div>
+        <div class="tuning-presets" aria-label="Behavior presets">
+          <button type="button" data-tuning-preset="natural">Natural</button>
+          <button type="button" data-tuning-preset="cohesive">Cohesive</button>
+          <button type="button" data-tuning-preset="loose">Loose</button>
+          <button type="button" data-tuning-preset="dramatic">Dramatic</button>
+        </div>
+        <div class="tuning-switches">
+          <label><input type="checkbox" data-tuning-key="flockingEnabled" /> Flocking</label>
+          <label><input type="checkbox" data-tuning-key="dogPressureEnabled" /> Dog pressure</label>
+          <label><input type="checkbox" data-tuning-key="barkEnabled" /> Bark force</label>
+          <label><input type="checkbox" data-tuning-key="boundaryEnabled" /> Boundaries</label>
+          <label><input type="checkbox" data-tuning-key="goalAssistEnabled" /> Goal assist</label>
+        </div>
+        <div class="tuning-grid">
+          <label><span>Separation <output data-tuning-output="separationWeight"></output></span><input type="range" min="0" max="4" step="0.05" data-tuning-key="separationWeight" /></label>
+          <label><span>Alignment <output data-tuning-output="alignmentWeight"></output></span><input type="range" min="0" max="2" step="0.05" data-tuning-key="alignmentWeight" /></label>
+          <label><span>Cohesion <output data-tuning-output="cohesionWeight"></output></span><input type="range" min="0" max="1.5" step="0.025" data-tuning-key="cohesionWeight" /></label>
+          <label><span>Awareness <output data-tuning-output="perceptionRadius"></output></span><input type="range" min="1" max="6.5" step="0.1" data-tuning-key="perceptionRadius" /></label>
+          <label><span>Personal space <output data-tuning-output="separationRadius"></output></span><input type="range" min="0.2" max="2.2" step="0.05" data-tuning-key="separationRadius" /></label>
+          <label><span>Minimum speed <output data-tuning-output="minSpeed"></output></span><input type="range" min="0" max="4" step="0.1" data-tuning-key="minSpeed" /></label>
+          <label><span>Maximum speed <output data-tuning-output="maxSpeed"></output></span><input type="range" min="1" max="10" step="0.1" data-tuning-key="maxSpeed" /></label>
+          <label><span>Boundary margin <output data-tuning-output="boundaryMargin"></output></span><input type="range" min="1" max="30" step="0.5" data-tuning-key="boundaryMargin" /></label>
+          <label><span>Boundary force <output data-tuning-output="boundaryStrength"></output></span><input type="range" min="0" max="18" step="0.25" data-tuning-key="boundaryStrength" /></label>
+          <label><span>Dog speed <output data-tuning-output="dogSpeed"></output></span><input type="range" min="8" max="55" step="1" data-tuning-key="dogSpeed" /></label>
+          <label><span>Dog radius <output data-tuning-output="dogRadius"></output></span><input type="range" min="0" max="40" step="0.5" data-tuning-key="dogRadius" /></label>
+          <label><span>Dog force <output data-tuning-output="dogStrength"></output></span><input type="range" min="0" max="60" step="1" data-tuning-key="dogStrength" /></label>
+          <label><span>Bark radius <output data-tuning-output="barkRadius"></output></span><input type="range" min="0" max="60" step="1" data-tuning-key="barkRadius" /></label>
+          <label><span>Bark force <output data-tuning-output="barkStrength"></output></span><input type="range" min="0" max="80" step="1" data-tuning-key="barkStrength" /></label>
+          <label><span>Goal pull <output data-tuning-output="goalAttraction"></output></span><input type="range" min="0" max="3" step="0.05" data-tuning-key="goalAttraction" /></label>
+        </div>
+      </aside>
+
       <div id="status-line" role="status" aria-live="polite">Move behind the flock and apply pressure</div>
 
       <div class="desktop-hint" aria-hidden="true">
@@ -145,9 +185,9 @@
         hidden
       >
         <div class="game-overlay__panel">
-          <span id="overlay-kicker" class="game-overlay__kicker">WEBGPU COMPUTE</span>
-          <h1 id="overlay-title">Preparing the flock</h1>
-          <p id="overlay-body">Checking the adapter and allocating GPU state.</p>
+          <span id="overlay-kicker" class="game-overlay__kicker">HOME FIELD</span>
+          <h1 id="overlay-title">Opening the gate</h1>
+          <p id="overlay-body">Loading Jep, the farm, and the GPU flock.</p>
           <div class="game-overlay__actions">
             <button id="overlay-primary" type="button">Resume</button>
             <button id="overlay-secondary" type="button">Restart</button>

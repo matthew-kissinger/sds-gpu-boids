@@ -51,6 +51,32 @@ const MIN_WORLD_EXTENT = PERCEPTION_RADIUS * 2;
 
 type UintStorageNode = StorageBufferNode<'uint'>;
 
+export type BoidTuning = {
+  separationWeight: number;
+  alignmentWeight: number;
+  cohesionWeight: number;
+  perceptionRadius: number;
+  separationRadius: number;
+  minSpeed: number;
+  maxSpeed: number;
+  boundaryMargin: number;
+  boundaryStrength: number;
+  goalAttraction: number;
+};
+
+export const DEFAULT_BOID_TUNING: BoidTuning = {
+  separationWeight: SEPARATION_WEIGHT,
+  alignmentWeight: ALIGNMENT_WEIGHT,
+  cohesionWeight: COHESION_WEIGHT,
+  perceptionRadius: PERCEPTION_RADIUS,
+  separationRadius: SEPARATION_RADIUS,
+  minSpeed: MIN_SPEED,
+  maxSpeed: MAX_SPEED,
+  boundaryMargin: BOUNDARY_MARGIN,
+  boundaryStrength: BOUNDARY_STRENGTH,
+  goalAttraction: 0,
+};
+
 export class GpuBoidSystem {
   private readonly positionAttribute = new THREE.StorageInstancedBufferAttribute(
     new Float32Array(MAX_BOIDS * VECTOR_STRIDE),
@@ -158,6 +184,16 @@ export class GpuBoidSystem {
   private readonly goalCenterRadiusUniform = uniform(new THREE.Vector4(0, 0, 0, 12));
   private readonly deepDiagnosticsUniform = uniform(0, 'uint');
   private readonly goalScenarioUniform = uniform(0, 'uint');
+  private readonly separationWeightUniform = uniform(SEPARATION_WEIGHT);
+  private readonly alignmentWeightUniform = uniform(ALIGNMENT_WEIGHT);
+  private readonly cohesionWeightUniform = uniform(COHESION_WEIGHT);
+  private readonly perceptionRadiusUniform = uniform(PERCEPTION_RADIUS);
+  private readonly separationRadiusUniform = uniform(SEPARATION_RADIUS);
+  private readonly minSpeedUniform = uniform(MIN_SPEED);
+  private readonly maxSpeedUniform = uniform(MAX_SPEED);
+  private readonly boundaryMarginUniform = uniform(BOUNDARY_MARGIN);
+  private readonly boundaryStrengthUniform = uniform(BOUNDARY_STRENGTH);
+  private readonly goalAttractionUniform = uniform(0);
 
   private stepPasses: ComputeNode[] = [];
   private scanResultRead: UintStorageNode = this.scanBRead;
@@ -276,6 +312,21 @@ export class GpuBoidSystem {
 
   setDeepDiagnostics(enabled: boolean): void {
     this.deepDiagnosticsUniform.value = enabled ? 1 : 0;
+  }
+
+  setTuning(tuning: Partial<BoidTuning>): void {
+    if (tuning.separationWeight !== undefined) this.separationWeightUniform.value = Math.max(0, tuning.separationWeight);
+    if (tuning.alignmentWeight !== undefined) this.alignmentWeightUniform.value = Math.max(0, tuning.alignmentWeight);
+    if (tuning.cohesionWeight !== undefined) this.cohesionWeightUniform.value = Math.max(0, tuning.cohesionWeight);
+    if (tuning.perceptionRadius !== undefined) this.perceptionRadiusUniform.value = THREE.MathUtils.clamp(tuning.perceptionRadius, 0.5, this.activeCellWidth);
+    if (tuning.separationRadius !== undefined) this.separationRadiusUniform.value = THREE.MathUtils.clamp(tuning.separationRadius, 0.1, this.activeCellWidth);
+    const requestedMinSpeed = Math.max(0, tuning.minSpeed ?? this.minSpeedUniform.value);
+    const requestedMaxSpeed = Math.max(0.1, tuning.maxSpeed ?? this.maxSpeedUniform.value);
+    this.minSpeedUniform.value = Math.min(requestedMinSpeed, requestedMaxSpeed);
+    this.maxSpeedUniform.value = Math.max(requestedMinSpeed, requestedMaxSpeed);
+    if (tuning.boundaryMargin !== undefined) this.boundaryMarginUniform.value = Math.max(0.5, tuning.boundaryMargin);
+    if (tuning.boundaryStrength !== undefined) this.boundaryStrengthUniform.value = Math.max(0, tuning.boundaryStrength);
+    if (tuning.goalAttraction !== undefined) this.goalAttractionUniform.value = Math.max(0, tuning.goalAttraction);
   }
 
   step(delta: number): void {
@@ -588,12 +639,12 @@ export class GpuBoidSystem {
                       If(
                         distanceSquared
                           .greaterThan(float(0.0001))
-                          .and(distanceSquared.lessThanEqual(float(PERCEPTION_RADIUS ** 2))),
+                          .and(distanceSquared.lessThanEqual(this.perceptionRadiusUniform.mul(this.perceptionRadiusUniform))),
                         () => {
                           alignment.addAssign(this.currentVelocityRead.element(otherIndex).xyz);
                           cohesion.addAssign(otherPosition.xyz);
                           neighborCount.addAssign(uint(1));
-                          If(distanceSquared.lessThan(float(SEPARATION_RADIUS ** 2)), () => {
+                          If(distanceSquared.lessThan(this.separationRadiusUniform.mul(this.separationRadiusUniform)), () => {
                             separation.addAssign(delta.div(distanceSquared.add(0.05)));
                           });
                         },
@@ -619,9 +670,9 @@ export class GpuBoidSystem {
         alignment.subAssign(velocity.xyz);
         cohesion.mulAssign(reciprocal);
         cohesion.subAssign(position.xyz);
-        acceleration.addAssign(separation.mul(SEPARATION_WEIGHT));
-        acceleration.addAssign(alignment.mul(ALIGNMENT_WEIGHT));
-        acceleration.addAssign(cohesion.mul(COHESION_WEIGHT));
+        acceleration.addAssign(separation.mul(this.separationWeightUniform));
+        acceleration.addAssign(alignment.mul(this.alignmentWeightUniform));
+        acceleration.addAssign(cohesion.mul(this.cohesionWeightUniform));
       });
 
       const predictedDog = this.dogPositionRadiusUniform.xyz.add(
@@ -674,36 +725,41 @@ export class GpuBoidSystem {
         },
       );
 
-      const innerBoundary = this.worldExtentUniform.sub(BOUNDARY_MARGIN);
+      const innerBoundary = this.worldExtentUniform.sub(this.boundaryMarginUniform);
       If(position.x.greaterThan(innerBoundary), () => {
         acceleration.x.subAssign(
-          position.x.sub(innerBoundary).div(BOUNDARY_MARGIN).mul(BOUNDARY_STRENGTH),
+          position.x.sub(innerBoundary).div(this.boundaryMarginUniform).mul(this.boundaryStrengthUniform),
         );
       });
       If(position.x.lessThan(innerBoundary.negate()), () => {
         acceleration.x.addAssign(
-          innerBoundary.negate().sub(position.x).div(BOUNDARY_MARGIN).mul(BOUNDARY_STRENGTH),
+          innerBoundary.negate().sub(position.x).div(this.boundaryMarginUniform).mul(this.boundaryStrengthUniform),
         );
       });
       If(position.z.greaterThan(innerBoundary), () => {
         acceleration.z.subAssign(
-          position.z.sub(innerBoundary).div(BOUNDARY_MARGIN).mul(BOUNDARY_STRENGTH),
+          position.z.sub(innerBoundary).div(this.boundaryMarginUniform).mul(this.boundaryStrengthUniform),
         );
       });
       If(position.z.lessThan(innerBoundary.negate()), () => {
         acceleration.z.addAssign(
-          innerBoundary.negate().sub(position.z).div(BOUNDARY_MARGIN).mul(BOUNDARY_STRENGTH),
+          innerBoundary.negate().sub(position.z).div(this.boundaryMarginUniform).mul(this.boundaryStrengthUniform),
         );
       });
 
+      const toGoalAssist = this.goalCenterRadiusUniform.xyz.sub(position.xyz);
+      const goalAssistDistance = toGoalAssist.length();
+      If(goalAssistDistance.greaterThan(0.001).and(this.goalAttractionUniform.greaterThan(0)), () => {
+        acceleration.addAssign(toGoalAssist.div(goalAssistDistance).mul(this.goalAttractionUniform));
+      });
       const nextVelocity = velocity.xyz.add(acceleration.mul(this.deltaUniform)).toVar();
       const speed = nextVelocity.length().toVar();
-      If(speed.greaterThan(MAX_SPEED), () => {
-        nextVelocity.mulAssign(float(MAX_SPEED).div(speed));
-        speed.assign(float(MAX_SPEED));
+      If(speed.greaterThan(this.maxSpeedUniform), () => {
+        nextVelocity.mulAssign(this.maxSpeedUniform.div(speed));
+        speed.assign(this.maxSpeedUniform);
       });
-      If(speed.greaterThan(0.0001).and(speed.lessThan(MIN_SPEED)), () => {
-        nextVelocity.mulAssign(float(MIN_SPEED).div(speed));
+      If(speed.greaterThan(0.0001).and(speed.lessThan(this.minSpeedUniform)), () => {
+        nextVelocity.mulAssign(this.minSpeedUniform.div(speed));
       });
       If(this.goalScenarioUniform.greaterThan(uint(0)), () => {
         const toGoal = this.goalCenterRadiusUniform.xyz.sub(position.xyz);
@@ -792,8 +848,8 @@ export class GpuBoidSystem {
         direction = random() * TAU;
         speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * random();
       } else if (scenario === 'field') {
-        x = (random() * 2 - 1) * worldExtent * 0.56;
-        z = (random() * 2 - 1) * worldExtent * 0.56;
+        x = (random() * 2 - 1) * worldExtent * 0.82;
+        z = -worldExtent * 0.2 + (random() * 2 - 1) * worldExtent * 0.58;
         direction = random() * TAU;
         speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * random();
       } else if (scenario === 'herd') {
@@ -805,10 +861,10 @@ export class GpuBoidSystem {
         speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * random();
       } else {
         const positionAngle = random() * TAU;
-        const goalRadius = Math.min(12, worldExtent * 0.18);
+        const goalRadius = Math.max(1, this.goalCenterRadiusUniform.value.w);
         const radius = Math.sqrt(random()) * goalRadius * 0.82;
-        x = worldExtent * 0.55 + Math.cos(positionAngle) * radius;
-        z = Math.sin(positionAngle) * radius;
+        x = this.goalCenterRadiusUniform.value.x + Math.cos(positionAngle) * radius;
+        z = this.goalCenterRadiusUniform.value.z + Math.sin(positionAngle) * radius;
         direction = random() * TAU;
         speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * random();
       }

@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { createHomeFieldLoader, loadHomeFieldModel } from '../assets/HomeFieldAssets';
 
 export type ArenaBounds = {
   halfWidth: number;
@@ -35,14 +36,14 @@ export type BarkPulseEvent = {
 };
 
 export const DEFAULT_DOG_TUNING: DogTuning = {
-  maxSpeed: 12,
-  acceleration: 9.5,
-  braking: 13,
+  maxSpeed: 34,
+  acceleration: 17,
+  braking: 22,
   turnResponsiveness: 15,
   edgePadding: 1.2,
   barkCooldown: 1.05,
   barkDuration: 0.46,
-  barkMaxRadius: 18,
+  barkMaxRadius: 32,
 };
 
 export class Dog {
@@ -55,6 +56,7 @@ export class Dog {
   barkSequence = 0;
 
   private readonly modelRoot = new THREE.Group();
+  private readonly loader = createHomeFieldLoader();
   private readonly targetVelocity = new THREE.Vector3();
   private readonly movement = new THREE.Vector2();
   private readonly legs: THREE.Mesh[] = [];
@@ -64,6 +66,13 @@ export class Dog {
   private readonly barkRingMaterial: THREE.MeshBasicMaterial;
   private readonly barkRing: THREE.Mesh;
   private readonly tuning: DogTuning;
+  private importedModel: THREE.Object3D | null = null;
+  private mixer: THREE.AnimationMixer | null = null;
+  private currentAction: THREE.AnimationAction | null = null;
+  private idleAction: THREE.AnimationAction | null = null;
+  private walkAction: THREE.AnimationAction | null = null;
+  private runAction: THREE.AnimationAction | null = null;
+  private barkAction: THREE.AnimationAction | null = null;
 
   private barkAge = Infinity;
   private barkCooldownRemaining = 0;
@@ -158,6 +167,32 @@ export class Dog {
     this.group.add(this.barkRing);
   }
 
+  async loadModel(): Promise<void> {
+    const gltf = await loadHomeFieldModel(this.loader, 'dog');
+    this.importedModel = gltf.scene;
+    this.importedModel.name = 'Jep - Home Field sheepdog';
+    this.importedModel.scale.setScalar(3.2);
+    this.importedModel.rotation.y = Math.PI;
+    this.importedModel.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      object.castShadow = true;
+      object.receiveShadow = true;
+    });
+    this.modelRoot.visible = false;
+    this.group.add(this.importedModel);
+
+    this.mixer = new THREE.AnimationMixer(this.importedModel);
+    const clip = (name: string): THREE.AnimationAction | null => {
+      const animation = gltf.animations.find((candidate) => candidate.name === name);
+      return animation ? this.mixer!.clipAction(animation) : null;
+    };
+    this.idleAction = clip('Idle_1') ?? clip('Idle_2');
+    this.walkAction = clip('Walk_F_IP') ?? this.idleAction;
+    this.runAction = clip('Run_F_IP') ?? clip('RunFast_F_IP') ?? this.walkAction;
+    this.barkAction = clip('Bark');
+    this.transitionAnimation(this.idleAction, 0);
+  }
+
   update(deltaSeconds: number, elapsedSeconds: number, inputMovement: THREE.Vector2, bounds: ArenaBounds): void {
     const delta = Math.min(Math.max(deltaSeconds, 0), 0.05);
     this.movement.copy(inputMovement);
@@ -200,6 +235,17 @@ export class Dog {
       this.legs[index].rotation.x = stride * (index % 2 === 0 ? 0.44 : -0.44);
     }
 
+    if (this.mixer) {
+      const locomotion = speedRatio > 0.56 ? this.runAction : speedRatio > 0.035 ? this.walkAction : this.idleAction;
+      if (this.barkAge >= this.tuning.barkDuration || !Number.isFinite(this.barkAge)) {
+        this.transitionAnimation(locomotion, 0.18);
+      }
+      if (this.currentAction && this.currentAction !== this.barkAction) {
+        this.currentAction.timeScale = THREE.MathUtils.clamp(0.55 + speedRatio * 1.2, 0.55, 1.65);
+      }
+      this.mixer.update(delta);
+    }
+
     this.updateBark(delta);
   }
 
@@ -212,6 +258,7 @@ export class Dog {
     this.barkRadius = 1.5;
     this.barkSequence += 1;
     this.barkRing.visible = true;
+    this.transitionAnimation(this.barkAction, 0.08);
 
     const event: BarkPulseEvent = {
       x: this.group.position.x,
@@ -248,6 +295,10 @@ export class Dog {
     return this.tuning.barkCooldown;
   }
 
+  setMaxSpeed(maxSpeed: number): void {
+    this.tuning.maxSpeed = THREE.MathUtils.clamp(maxSpeed, 1, 80);
+  }
+
   reset(position: Readonly<THREE.Vector3> = new THREE.Vector3()): void {
     this.group.position.copy(position);
     this.group.rotation.set(0, 0, 0);
@@ -265,7 +316,25 @@ export class Dog {
   dispose(): void {
     for (const geometry of this.geometries) geometry.dispose();
     for (const material of this.materials) material.dispose();
+    if (this.importedModel) {
+      this.importedModel.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        object.geometry.dispose();
+        const list = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of list) material.dispose();
+      });
+    }
+    this.mixer?.stopAllAction();
+    this.loader.dracoLoader?.dispose();
     this.barkListeners.clear();
+  }
+
+  private transitionAnimation(next: THREE.AnimationAction | null, fadeSeconds: number): void {
+    if (!next || next === this.currentAction) return;
+    const previous = this.currentAction;
+    next.reset().fadeIn(fadeSeconds).play();
+    previous?.fadeOut(fadeSeconds);
+    this.currentAction = next;
   }
 
   private updateBark(delta: number): void {

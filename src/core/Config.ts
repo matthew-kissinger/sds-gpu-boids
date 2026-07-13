@@ -30,7 +30,7 @@ function nearestCount(value: number): number {
 
 export function readConfig(search = window.location.search): PrototypeConfig {
   const params = new URLSearchParams(search);
-  const count = nearestCount(Number(params.get('count')) || 16_000);
+  const count = nearestCount(Number(params.get('count')) || 100_000);
   const rawScenario = params.get('scenario') as ScenarioId | null;
   const scenario = rawScenario && SCENARIOS.has(rawScenario) ? rawScenario : 'field';
   const seed = Math.max(1, Math.floor(Number(params.get('seed')) || 13_371));
@@ -42,12 +42,6 @@ export function readConfig(search = window.location.search): PrototypeConfig {
   return { count, scenario, seed, benchmark, goalDemo, deepDiagnostics, manualStep, maxDpr };
 }
 
-export function worldExtentFor(count: number, scenario: ScenarioId): number {
-  if (scenario === 'constant') {
-    const targetDensity = 1.5;
-    return Math.max(16, Math.sqrt(count / targetDensity) * 0.5);
-  }
-  if (scenario === 'goal') return 24;
-  if (scenario === 'herd') return 32;
-  return 46;
+export function worldExtentFor(_count: number, _scenario: ScenarioId): number {
+  return 220;
 }

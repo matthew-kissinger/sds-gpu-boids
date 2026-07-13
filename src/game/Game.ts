@@ -18,9 +18,11 @@ import {
 import { FlockRenderer } from '../render/FlockRenderer';
 import { CameraRig } from '../systems/CameraRig';
 import { Hud, type HudState, type SimulationScenario } from '../systems/Hud';
+import { AudioSystem } from '../systems/AudioSystem';
+import { DEFAULT_FLOCK_TUNING, TuningPanel, type FlockTuning } from '../systems/TuningPanel';
 import { World } from '../world/World';
 
-const GOAL_FRACTION = 0.72;
+const GOAL_FRACTION = 0.6;
 const GOAL_HOLD_SECONDS = 2.5;
 const DIAGNOSTIC_INTERVAL_SECONDS = 0.25;
 
@@ -29,6 +31,7 @@ export class Game {
     let game: Game | undefined;
     const bundle = await createRenderer(canvas, (info) => game?.handleDeviceLost(info));
     game = new Game(canvas, bundle);
+    await game.initializeAssets();
     return game;
   }
 
@@ -43,6 +46,9 @@ export class Game {
   private readonly input: InputController;
   private readonly cameraRig = new CameraRig(this.camera);
   private readonly hud: Hud;
+  private readonly audio = new AudioSystem();
+  private readonly tuningPanel: TuningPanel;
+  private tuning: FlockTuning = { ...DEFAULT_FLOCK_TUNING };
   private readonly performance = new PerformanceTracker();
   private readonly movement = new THREE.Vector2();
   private readonly goalPosition = new THREE.Vector3();
@@ -80,8 +86,8 @@ export class Game {
     this.renderer = bundle.renderer;
     this.capability = bundle.capability;
     this.adapterLabel = this.formatAdapter(bundle);
-    this.scene.background = new THREE.Color('#b7c68b');
-    this.scene.fog = new THREE.Fog('#b7c68b', 62, 150);
+    this.scene.background = new THREE.Color('#b9d5e8');
+    this.scene.fog = new THREE.Fog('#c9d9df', 330, 820);
 
     this.world = new World(this.scene);
     this.boids = new GpuBoidSystem(this.renderer);
@@ -100,7 +106,9 @@ export class Game {
       onScenarioChange: (scenario) => this.setScenario(scenario),
       onPause: () => this.togglePause(),
       onRestart: () => this.restart(),
+      onMute: () => this.audio.toggleMute(),
     });
+    this.tuningPanel = new TuningPanel((tuning) => this.applyTuning(tuning));
 
     this.loop = new Loop(
       (delta) => this.fixedUpdate(delta),
@@ -112,8 +120,12 @@ export class Game {
 
     this.resetPlayerAndCamera();
     resizeRenderer(this.renderer, this.camera, this.config.maxDpr);
-    this.installTestHooks();
-    this.publishDiagnostics();
+    window.addEventListener('pointerdown', this.unlockAudio, { passive: true });
+    window.addEventListener('keydown', this.unlockAudio);
+  }
+
+  private async initializeAssets(): Promise<void> {
+    await Promise.all([this.world.loadAssets(), this.dog.loadModel()]);
   }
 
   start(): void {
@@ -121,9 +133,11 @@ export class Game {
       this.fixedUpdate(1 / 60);
       this.render();
       this.publishDiagnostics();
+      this.installTestHooks();
       return;
     }
     this.loop.start();
+    this.installTestHooks();
   }
 
   dispose(): void {
@@ -132,13 +146,17 @@ export class Game {
     this.loop.stop();
     this.input.dispose();
     this.hud.dispose();
+    this.tuningPanel.dispose();
     this.dog.dispose();
     this.flock.dispose();
     this.boids.dispose();
     this.world.dispose();
+    this.audio.dispose();
     this.performance.dispose();
     this.renderer.dispose();
     window.removeEventListener('keydown', this.onGlobalKeyDown);
+    window.removeEventListener('pointerdown', this.unlockAudio);
+    window.removeEventListener('keydown', this.unlockAudio);
     window.__THREE_GAME_DIAGNOSTICS__ = undefined;
     window.render_game_to_text = undefined;
     window.advanceTime = undefined;
@@ -152,11 +170,23 @@ export class Game {
     this.dog.update(delta, this.simulationElapsed, this.movement, this.arenaBounds);
 
     if (this.input.consumeBarkPressed() && this.dog.tryBark()) {
-      this.boids.setBark(this.dog.group.position, this.dog.forward);
+      this.boids.setBark(
+        this.dog.group.position,
+        this.dog.forward,
+        this.tuning.barkRadius,
+        this.tuning.barkStrength,
+        0.46,
+      );
       this.hud.flashBark();
+      this.audio.playBark();
     }
 
-    this.boids.setDog(this.dog.group.position, this.dog.velocity);
+    this.boids.setDog(
+      this.dog.group.position,
+      this.dog.velocity,
+      this.tuning.dogRadius,
+      this.tuning.dogStrength,
+    );
     if (!this.config.goalDemo || this.simulationElapsed <= delta) {
       const computeStart = performance.now();
       this.boids.step(delta);
@@ -180,7 +210,10 @@ export class Game {
       } else {
         this.holdProgress = Math.max(0, this.holdProgress - frame.deltaSeconds * 0.8);
       }
-      if (this.holdProgress >= 1) this.won = true;
+      if (this.holdProgress >= 1) {
+        this.won = true;
+        this.audio.playVictory();
+      }
     }
     this.world.update(this.simulationElapsed, this.holdProgress);
     this.requestDiagnostics(frame.elapsedSeconds);
@@ -191,7 +224,7 @@ export class Game {
     this.performance.add(frame.deltaSeconds * 1_000, this.computeSubmitMs, this.lastRenderSubmitMs);
     this.lastComputeSubmitMs = this.computeSubmitMs;
     this.computeSubmitMs = 0;
-    this.publishDiagnostics(frame);
+    if (this.frame >= 4 || this.fatalError) this.publishDiagnostics(frame);
   }
 
   private render(): void {
@@ -211,6 +244,7 @@ export class Game {
     this.arenaBounds.halfDepth = extent;
     this.world.configure(extent);
     this.goalPosition.set(this.world.goal.center.x, 0, this.world.goal.center.y);
+    this.boids.setGoal(this.goalPosition, this.world.goal.radius);
 
     if (reinitialize) {
       this.boids.reinitialize(this.config.count, this.config.scenario, this.config.seed, extent);
@@ -218,16 +252,20 @@ export class Game {
     } else {
       this.boids.initialize(this.config.count, this.config.scenario, this.config.seed, extent);
     }
-    this.boids.setGoal(this.goalPosition, this.world.goal.radius);
     this.cameraRig.configureArena(this.arenaBounds, this.goalPosition);
     this.resetRunState();
   }
 
   private resetPlayerAndCamera(): void {
     const extent = this.arenaBounds.halfWidth;
-    this.dogStart.set(-extent * 0.62, 0, Math.min(8, extent * 0.18));
+    this.dogStart.set(-extent * 0.15, 0, -extent * 0.9);
     this.dog.reset(this.dogStart);
-    this.boids.setDog(this.dog.group.position, this.dog.velocity);
+    this.boids.setDog(
+      this.dog.group.position,
+      this.dog.velocity,
+      this.tuning.dogRadius,
+      this.tuning.dogStrength,
+    );
     this.cameraRig.configureArena(this.arenaBounds, this.goalPosition);
     this.cameraRig.setViewport(this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight));
     this.cameraRig.snapTo(this.dog.group.position);
@@ -244,6 +282,7 @@ export class Game {
     this.readbackState = 'warming';
     this.lastDiagnosticRequestAt = -Infinity;
     this.performance.reset();
+    this.audio.restart();
     this.gpuComputeMs = 0;
     this.gpuRenderMs = 0;
     this.gpuTimingMeasured = false;
@@ -275,6 +314,7 @@ export class Game {
   private togglePause(): void {
     if (this.won || this.fatalError) return;
     this.paused = !this.paused;
+    this.audio.setPaused(this.paused);
     this.loop.resetClock();
   }
 
@@ -342,10 +382,10 @@ export class Game {
   }
 
   private statusText(goalPercent: number): string {
-    if (this.won) return 'Flock secured - press R to run again';
+    if (this.won) return 'Home Field secured - press R to herd again';
     if (this.paused) return 'Simulation paused';
     if (goalPercent >= GOAL_FRACTION * 100) return `Hold the flock - ${Math.round(this.holdProgress * 100)}%`;
-    return `Drive ${Math.round(GOAL_FRACTION * 100)}% into the gold pen`;
+    return `Drive ${Math.round(GOAL_FRACTION * 100)}% through the gate and hold the pen`;
   }
 
   private publishDiagnostics(frame?: LoopFrame): void {
@@ -362,6 +402,7 @@ export class Game {
         barkSequence: this.dog.barkSequence,
         barkReadiness: this.dog.barkReadiness,
       },
+      input: this.input.getDebugState(),
       objective: {
         goalCount: this.goalCount,
         goalPercent: this.config.count > 0 ? (this.goalCount / this.config.count) * 100 : 0,
@@ -396,7 +437,7 @@ export class Game {
         calls: info.render.calls,
         triangles: info.render.triangles,
         flockDrawCalls: 1,
-        flockTriangles: this.config.count * 8,
+        flockTriangles: this.config.count * this.flock.trianglesPerSheep,
         geometries: info.memory.geometries,
         textures: info.memory.textures,
         adapter: {
@@ -414,6 +455,8 @@ export class Game {
         dpr: Math.min(window.devicePixelRatio || 1, this.config.maxDpr),
       },
       error: this.fatalError,
+      assets: { homeField: this.world.loaded, dog: 'Jep.glb', sheep: 'SDS instanced sheep geometry' },
+      tuning: { ...this.tuning },
     };
     window.__THREE_GAME_DIAGNOSTICS__ = diagnostics;
   }
@@ -441,6 +484,16 @@ export class Game {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void this.canvas.requestFullscreen();
   };
+
+  private readonly unlockAudio = (): void => {
+    void this.audio.unlock();
+  };
+
+  private applyTuning(tuning: Readonly<FlockTuning>): void {
+    this.tuning = { ...tuning };
+    this.boids.setTuning(tuning);
+    this.dog.setMaxSpeed(tuning.dogSpeed);
+  }
 
   private handleDeviceLost(info: unknown): void {
     this.fatalError = `GPU device lost: ${String(info)}`;

@@ -17,3 +17,13 @@ Original prompt: Build a standalone new Sheep Dog Simulator prototype that moves
 - Stable 100,000-agent throughput is proven on the named development machine; dense sustained cases are explicitly labeled when the 512-candidate approximation engages.
 - The production `sds` repository remains untouched.
 - Capacity on the user's inexpensive target instance remains a hardware-owned follow-up, not an inferred claim.
+
+## Home Field polish and tuning pass
+
+- Rebuilt the prototype world as a 440-meter Home Field using the authentic Jep dog, farmhouse, fence, gate, homestead props, trees, rocks, placement data, music, bark, bleats, and victory audio.
+- Added a full start-to-win loop with a north pen, animated goal beacon, 60% hold objective, pause/restart, responsive touch controls, and a camera/start layout designed for herding toward the farm.
+- Replaced the placeholder flock wedge with a recognizable low-triangle sheep assembled from one merged geometry and rendered directly from GPU storage in one instanced draw.
+- Added the live Flock Lab with four presets, five behavior switches, fifteen sliders, reset, and copy-to-JSON. Changes apply to the active GPU simulation without restarting.
+- Added shader uniforms for flock weights/radii/speeds, boundary behavior, dog pressure, bark pressure, and optional goal attraction.
+- Revalidated the independent CPU/GPU one-step oracle after the enlarged Home Field seed change.
+- Captured desktop/mobile game and tuning-drawer screenshots and completed a fresh 1k/100k production benchmark.

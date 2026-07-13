@@ -16,6 +16,12 @@ type Diagnostics = {
     barkStrength?: number;
     barkSequence?: number;
   };
+  tuning?: {
+    separationWeight?: number;
+    dogStrength?: number;
+    goalAttraction?: number;
+    goalAssistEnabled?: boolean;
+  };
 };
 
 async function openLiveRuntime(page: Page, path: string): Promise<boolean> {
@@ -82,6 +88,27 @@ test('count and scenario controls rebuild the simulation', async ({ page }, test
   await page.locator('#scenario-select').selectOption('herd');
   await expect.poll(async () => (await diagnostics(page))?.config?.scenario, { timeout: 15_000 }).toBe('herd');
   await expect(page.locator('#boid-count')).toContainText(/4,?000/);
+});
+
+test('live tuning controls update GPU boid behavior without restarting', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name.includes('mobile'), 'The desktop project covers the tuning drawer interaction.');
+  const live = await openLiveRuntime(page, '/?count=1000&scenario=field');
+  test.skip(!live, 'This browser exercised the explicit unsupported-WebGPU path.');
+
+  const initialPosition = position(await diagnostics(page));
+  await page.locator('#tuning-toggle').click();
+  await expect(page.locator('#tuning-panel')).toBeVisible();
+  await page.locator('input[data-tuning-key="separationWeight"]').fill('3.1');
+  await page.locator('input[data-tuning-key="dogStrength"]').fill('52');
+  await page.locator('input[data-tuning-key="goalAttraction"]').fill('1.25');
+  await page.locator('input[data-tuning-key="goalAssistEnabled"]').check();
+
+  await expect.poll(async () => (await diagnostics(page))?.tuning?.separationWeight).toBeCloseTo(3.1, 3);
+  await expect.poll(async () => (await diagnostics(page))?.tuning?.dogStrength).toBeCloseTo(52, 3);
+  await expect.poll(async () => (await diagnostics(page))?.tuning?.goalAttraction).toBeCloseTo(1.25, 3);
+  await expect.poll(async () => (await diagnostics(page))?.tuning?.goalAssistEnabled).toBe(true);
+  const finalPosition = position(await diagnostics(page));
+  expect(Math.hypot(finalPosition.x - initialPosition.x, finalPosition.z - initialPosition.z)).toBeLessThan(0.05);
 });
 
 test('goal demo advances objective reduction through the win state', async ({ page }, testInfo) => {

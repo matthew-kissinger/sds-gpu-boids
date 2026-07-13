@@ -4,15 +4,15 @@
 
 This prototype was implemented as a separate engine experiment. It uses the public boids model of separation, alignment, and cohesion and standard parallel primitives including atomics, exclusive prefix scan, compact scatter, and ping-pong state.
 
-It does not copy the production Sheep Dog Simulator flocking source, scene registry, Worker simulation, models, textures, sounds, or UI assets. Initial visuals are procedural geometry, colors, gradients, and CSS created for this prototype.
+It does not copy the production Sheep Dog Simulator flocking source, scene registry, Worker simulation, or multiplayer code. The WebGPU compute engine, compact-grid implementation, renderer, controls, camera, and tuning UI are original to this prototype.
 
-The production game informed product-level ideas such as controlling a sheepdog, barking, herding into a goal, and the importance of dense-clump testing. Those ideas are not shared runtime code.
+The polished Home Field pass intentionally reuses selected non-code SDS assets. Their paths and roles are recorded in [HOME-FIELD-ASSET-MANIFEST.md](HOME-FIELD-ASSET-MANIFEST.md).
 
 ## Project license
 
 The root `LICENSE` applies AGPL-3.0-or-later to the prototype source, matching the Sheep Dog Simulator source policy.
 
-No copied SDS non-code assets are present. If SDS art is introduced later, each asset must carry its CC BY-SA 4.0 attribution and share-alike obligations in an asset manifest.
+SDS non-code assets are distributed under CC BY-SA 4.0. The copied `LICENSE-ASSETS` file is included at the project root, and the asset manifest records provenance. New procedural sheep geometry and UI styling are also released under the applicable project terms.
 
 ## Dependencies
 
@@ -27,7 +27,7 @@ Runtime and development dependencies retain their own licenses. The primary pack
 
 Consult each installed package's license file and lockfile version before distribution. No API key or generated-asset service is required by this project.
 
-## Future asset rule
+## Asset rule
 
 Generated, purchased, or copied assets must be added with:
 

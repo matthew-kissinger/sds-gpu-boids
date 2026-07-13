@@ -172,10 +172,13 @@ export function initializeBoids(options: InitialStateOptions): BoidState {
       x = worldExtent * 0.55 + Math.cos(positionAngle) * radius;
       z = Math.sin(positionAngle) * radius;
       velocityAngle = random() * Math.PI * 2;
+    } else if (scenario === 'field') {
+      x = (random() * 2 - 1) * worldExtent * 0.82;
+      z = -worldExtent * 0.2 + (random() * 2 - 1) * worldExtent * 0.58;
+      velocityAngle = random() * Math.PI * 2;
     } else {
-      const extentRatio = scenario === 'field' ? 0.56 : 0.86;
-      x = (random() * 2 - 1) * worldExtent * extentRatio;
-      z = (random() * 2 - 1) * worldExtent * extentRatio;
+      x = (random() * 2 - 1) * worldExtent * 0.86;
+      z = (random() * 2 - 1) * worldExtent * 0.86;
       velocityAngle = random() * Math.PI * 2;
     }
 

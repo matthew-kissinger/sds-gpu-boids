@@ -1,47 +1,31 @@
 # Measured results
 
-Measured on 2026-07-13 using the production Vite build at 1280 by 720, DPR 1, installed Chrome 150.0.7871.114, an NVIDIA GeForce RTX 3070 (WebGPU adapter architecture reported as `ampere`), driver 32.0.15.9649, Ryzen 7 3700X, and Windows build 10.0.26200.8655.
+Measured on 2026-07-13 using the production Vite preview at 1280 by 720, DPR 1, installed Chrome 150.0.7871.114, and an RTX 3070 WebGPU adapter reported as `ampere`. These figures establish this development machine only.
 
-These results establish this development machine only. They do not predict or certify the user's inexpensive target instance.
+## Final Home Field benchmark
+
+Each case used a three-second warmup and eight-second measured window.
+
+| Sheep | Frame p50 | Frame p95 | Median FPS | GPU compute | GPU render | Validity |
+|---:|---:|---:|---:|---:|---:|---|
+| 1,000 | 6.9 ms | 7.0 ms | 144.9 | 0.07 ms | 0.17 ms | Exact neighborhood |
+| 100,000 | 6.9 ms | 7.0 ms | 144.9 | 2.89 ms | 3.21 ms | 32,944 sheep candidate-capped at the final sample |
+
+The final 100,000-sheep case advanced simulation in real time with no invalid indices or measured dropped steps and cleared the runner's 60 Hz gate on this machine. It does not certify 60 Hz on inexpensive hardware.
+
+The final sheep mesh costs 130 triangles per sheep (13 million triangles at 100,000) and the complete flock is submitted as one instanced draw.
 
 ## Correctness
 
-The installed-Chrome one-step GPU oracle read back all 1,000 field boids and compared them with the independent CPU compact-grid implementation:
+The installed-Chrome one-step oracle compared all 1,000 GPU sheep with the independent CPU compact-grid implementation after the enlarged Home Field seed change:
 
-- maximum position error: 9.5367431640625e-7;
-- maximum velocity error: 4.76837158203125e-7;
-- RMS position error: 2.924009336522957e-8;
-- RMS velocity error: 3.1e-8 to 3.3e-8 across final verification runs; parallel scatter ordering can slightly change floating-point accumulation order.
+- maximum position error: `0.0000019073486328125`;
+- maximum velocity error: `0.00000011920928955078125`;
+- RMS position error: `0.00000004264961199760036`;
+- RMS velocity error: `0.0000000064466113128550476`.
 
-The unit oracle suite also passes all 11 tests, including exact compact-grid versus all-pairs neighbor counts and one-step integration at 256 and 1,000 boids.
+All 11 CPU reference tests pass, including compact-grid versus all-pairs comparisons.
 
-## Five-second ladder
+## Interpretation
 
-The 27-case ladder used a two-second warmup and five-second measured window per case. Every case maintained real-time 60 Hz simulation, zero invalid indices, zero console/page errors, and a frame p95 no higher than 7.1 ms.
-
-| Workload | Exact-neighborhood tiers | Candidate cap begins | 100k timing |
-|---|---:|---:|---:|
-| Constant density | 1k through 100k | Not during the five-second window | p95 7.0 ms, p99 7.1 ms, GPU compute 3.21 ms, render 0.38 ms |
-| Fixed field | 1k through 16k | 32k | p95 7.1 ms; candidate-capped |
-| Compressed herd | 1k through 8k | 16k | p95 7.1 ms; candidate-capped |
-
-Candidate-capped cases remain bounded, interactive boid approximations. They are not exact evaluation of every neighbor within the perception radius.
-
-## Repeats and soak
-
-Three independent 100k constant-density runs used five-second warmups and one-minute measured windows:
-
-- frame p95: 7.0 to 7.1 ms;
-- GPU compute: 3.52 to 4.27 ms;
-- GPU render: 0.27 to 0.32 ms;
-- simulation-rate ratio: 1.0 in all runs;
-- invalid indices, dropped measured steps, console errors, page errors, and device loss: zero;
-- final-step candidate-capped boids: 19,049 to 22,160 as cohesion formed dense local clusters.
-
-The five-minute 100k soak recorded 43,203 frame samples, p95 7.0 ms, p99 7.1 ms, 3.22 ms GPU compute, 0.33 ms GPU render, exactly 300 seconds of simulation advancement, no measured dropped steps, no invalid indices, no browser errors, and no device loss. Its final sampled step had 8,386 candidate-capped boids.
-
-## Conclusion
-
-This prototype proves stable, interactive 100,000-agent throughput on the named RTX 3070 machine. It also proves exact CPU/GPU agreement for the bounded correctness oracle. It does not prove that 100,000 agents remain exact-neighborhood boids after sustained clustering; the 512-candidate guard intentionally trades neighborhood completeness for bounded work and reports when that tradeoff engages.
-
-Raw local reports are written to `artifacts/benchmarks/` and are intentionally ignored by Git because they are machine-specific evidence.
+This build proves that the new engine can keep 100,000 interactive sheep real-time on the named development GPU while rendering the polished Home Field and live tuning UI. Sustained dense clustering can engage the explicit candidate guard; those steps remain bounded and playable but are approximate boids. Raw machine-specific reports are stored under `artifacts/benchmarks/` and are ignored by Git.

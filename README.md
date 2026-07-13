@@ -1,6 +1,6 @@
-# Sheepdog GPU Boids Prototype
+# Sheepdog GPU Home Field
 
-A standalone WebGPU experiment for herding large flocks. The simulation builds a spatial grid and advances boids in GPU compute passes, then renders the same storage-resident state without creating one JavaScript object per sheep.
+A standalone, playable WebGPU re-imagining of Sheep Dog Simulator's Home Field. It uses the original Jep dog, farm, fence, gate, tree, rock, homestead, music, bark, and bleat assets while a new GPU compute engine simulates and directly renders up to 100,000 sheep.
 
 This is a new-engine prototype. It is not a Sheep Dog Simulator scene, game mode, multiplayer client, or replacement release. It deliberately does not import the production game's `shared/` deterministic simulation or connect to its Cloudflare Worker.
 
@@ -42,15 +42,19 @@ The production preview runs at `http://127.0.0.1:4190`. Benchmarking defaults to
 - `R`: restart the current seed and workload
 - Touch stick: move on touch devices
 - `Bark` touch button: bark
-- Count and workload selectors: rebuild the simulation
+- Count and starting-layout selectors: rebuild the simulation
+- `Tune`: open the live Flock Lab
+- `SFX`: mute or restore music and effects
+
+Flock Lab changes the running compute simulation without a restart. It includes presets plus switches and sliders for separation, alignment, cohesion, awareness, personal space, speed limits, boundaries, dog speed/pressure, bark pressure, and optional goal attraction. `Copy` writes the current tuning as JSON.
 
 Herd enough sheep into the gold goal and hold them there to win. The `Goal demo` workload exists for objective-reduction QA; it is not a benchmark workload.
 
-## Workloads
+## Starting layouts
 
-- `Constant density`: the arena grows with count, isolating scaling at roughly stable local density.
-- `Fixed field`: every count uses the same open arena, increasing density as the ladder rises.
-- `Herding clump`: starts compressed and stresses the candidate cap and overflow diagnostics.
+- `Open pasture`: scatters throughout the enlarged Home Field.
+- `Home Field scatter`: places the flock between Jep and the north pen for a complete herding run.
+- `Tight flock`: starts compressed and stresses crowd response.
 
 The count ladder is 1k, 2k, 4k, 8k, 16k, 32k, 50k, 75k, and 100k. The same complete ladder is available in the UI and benchmark runner.
 

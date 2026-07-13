@@ -77,9 +77,12 @@ export class CameraRig {
     }
 
     if (this.hasObjective) {
-      const objectiveDistance = this.desiredFocus.distanceTo(this.objective);
-      const objectiveWeight = THREE.MathUtils.clamp(objectiveDistance / 125, 0.1, 0.46);
-      this.desiredFocus.lerp(this.objective, objectiveWeight);
+      this.workingVelocity.copy(this.objective).sub(this.desiredFocus);
+      const objectiveDistance = this.workingVelocity.length();
+      if (objectiveDistance > 0.01) {
+        this.workingVelocity.multiplyScalar(Math.min(8, objectiveDistance * 0.08) / objectiveDistance);
+        this.desiredFocus.add(this.workingVelocity);
+      }
     }
 
     const xPadding = Math.min(4, this.bounds.halfWidth * 0.12);
@@ -100,13 +103,13 @@ export class CameraRig {
   private composeHeight(target: Readonly<THREE.Vector3>): number {
     if (!this.hasObjective) return this.baseHeight;
     const targetToObjective = Math.hypot(target.x - this.objective.x, target.z - this.objective.z);
-    return this.baseHeight + Math.min(42, targetToObjective * 0.38);
+    return this.baseHeight + Math.min(8, targetToObjective * 0.04);
   }
 
   private composeCameraPosition(height: number): void {
     const portraitLift = this.aspect < 1 ? THREE.MathUtils.lerp(1.18, 1.38, 1 - this.aspect) : 1;
     const adjustedHeight = height * portraitLift;
-    const trailingDistance = adjustedHeight * (this.aspect < 0.8 ? 0.56 : 0.68);
+    const trailingDistance = adjustedHeight * (this.aspect < 0.8 ? 0.72 : 0.9);
     this.desiredPosition.set(
       this.desiredFocus.x,
       this.desiredFocus.y + adjustedHeight,
@@ -117,6 +120,6 @@ export class CameraRig {
   private recalculateHeight(): void {
     const horizontalDemand = this.bounds.halfWidth / Math.max(0.72, this.aspect);
     const arenaDemand = Math.max(horizontalDemand, this.bounds.halfDepth);
-    this.baseHeight = THREE.MathUtils.clamp(15 + arenaDemand * 0.38, 20, 48);
+    this.baseHeight = THREE.MathUtils.clamp(15 + arenaDemand * 0.3, 20, 38);
   }
 }

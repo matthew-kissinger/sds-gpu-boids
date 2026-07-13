@@ -75,7 +75,7 @@ export async function createRenderer(
     antialias: true,
     alpha: false,
     powerPreference: 'high-performance',
-    trackTimestamp: capability.timestampQuery,
+    trackTimestamp: capability.timestampQuery && new URLSearchParams(window.location.search).get('bench') === '1',
   });
   renderer.onDeviceLost = onDeviceLost;
   await renderer.init();
