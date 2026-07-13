@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#101713" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101713'/%3E%3Ccircle cx='26' cy='30' r='15' fill='%23f3edd8'/%3E%3Cpath d='M39 22h13v18H39z' fill='%23d8c99c'/%3E%3Ccircle cx='48' cy='28' r='2' fill='%23101713'/%3E%3C/svg%3E" />
+    <meta
+      name="description"
+      content="A standalone WebGPU compute prototype for large interactive sheep flocks."
+    />
+    <title>GPU Flock Lab - Sheep Dog Prototype</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" tabindex="0" aria-label="GPU sheep herding prototype"></canvas>
+
+      <header id="hud" aria-label="Game status">
+        <section class="objective-cluster" aria-label="Herding objective">
+          <div class="prototype-mark">
+            <span class="prototype-mark__eyebrow">GPU FLOCK LAB</span>
+            <strong>Herd into the amber ground</strong>
+          </div>
+
+          <div class="flock-count">
+            <span>ACTIVE FLOCK</span>
+            <strong id="boid-count">1,000</strong>
+          </div>
+
+          <div class="objective-progress">
+            <div class="objective-progress__line">
+              <span>IN GOAL</span>
+              <strong id="goal-percent">0%</strong>
+            </div>
+            <div
+              class="meter meter--goal"
+              role="progressbar"
+              aria-label="Sheep in goal"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <span id="goal-meter-fill" class="meter__fill"></span>
+            </div>
+            <div class="objective-progress__line objective-progress__line--hold">
+              <span>HOLD TO SECURE</span>
+            </div>
+            <div
+              class="meter meter--hold"
+              role="progressbar"
+              aria-label="Goal hold progress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <span id="hold-meter-fill" class="meter__fill"></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="performance-strip" aria-label="Performance summary">
+          <div>
+            <span>FPS</span>
+            <strong id="fps-value">000</strong>
+          </div>
+          <div>
+            <span>P95</span>
+            <strong id="p95-value">0.0 ms</strong>
+          </div>
+          <button id="metrics-toggle" class="icon-button" type="button" aria-expanded="false" aria-controls="metrics-panel">
+            SIM
+          </button>
+        </section>
+
+        <section class="simulation-controls" aria-label="Prototype controls">
+          <label>
+            <span>FLOCK</span>
+            <select id="count-select" aria-label="Boid count">
+              <option value="1000">1,000</option>
+              <option value="2000">2,000</option>
+              <option value="4000">4,000</option>
+              <option value="8000">8,000</option>
+              <option value="16000">16,000</option>
+              <option value="32000">32,000</option>
+              <option value="50000">50,000</option>
+              <option value="75000">75,000</option>
+              <option value="100000">100,000</option>
+            </select>
+          </label>
+          <label>
+            <span>LAYOUT</span>
+            <select id="scenario-select" aria-label="Starting flock layout">
+              <option value="constant">Constant density</option>
+              <option value="field">Open field</option>
+              <option value="herd">Herding pressure</option>
+              <option value="goal">Goal challenge</option>
+            </select>
+          </label>
+          <button id="pause-button" class="icon-button" type="button" aria-label="Pause simulation" title="Pause (P)">
+            <span aria-hidden="true">II</span>
+          </button>
+          <button id="restart-button" class="icon-button" type="button" aria-label="Restart run" title="Restart (R)">
+            <span aria-hidden="true">R</span>
+          </button>
+        </section>
+
+        <section id="metrics-panel" class="metrics-panel" aria-label="Simulation diagnostics" hidden>
+          <div>
+            <span>ALGORITHM</span>
+            <strong id="algorithm-value">GPU grid</strong>
+          </div>
+          <div>
+            <span>MAX CELL</span>
+            <strong id="occupancy-value">0/0</strong>
+          </div>
+          <div>
+            <span>TRUNCATED</span>
+            <strong id="truncation-value">0</strong>
+          </div>
+          <div>
+            <span>READBACK</span>
+            <strong id="readback-value">pending</strong>
+          </div>
+          <p id="adapter-line">Adapter details pending</p>
+        </section>
+      </header>
+
+      <div id="status-line" role="status" aria-live="polite">Move behind the flock and apply pressure</div>
+
+      <div class="desktop-hint" aria-hidden="true">
+        <span><b>WASD</b> MOVE</span>
+        <span><b>SPACE</b> BARK</span>
+        <span><b>P</b> PAUSE</span>
+      </div>
+
+      <section
+        id="game-overlay"
+        class="game-overlay"
+        data-state="playing"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="overlay-title"
+        aria-describedby="overlay-body"
+        aria-live="assertive"
+        hidden
+      >
+        <div class="game-overlay__panel">
+          <span id="overlay-kicker" class="game-overlay__kicker">WEBGPU COMPUTE</span>
+          <h1 id="overlay-title">Preparing the flock</h1>
+          <p id="overlay-body">Checking the adapter and allocating GPU state.</p>
+          <div class="game-overlay__actions">
+            <button id="overlay-primary" type="button">Resume</button>
+            <button id="overlay-secondary" type="button">Restart</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="touch-controls" aria-label="Touch controls">
+        <div id="touch-stick" role="application" aria-label="Movement joystick" data-active="false">
+          <span class="touch-stick__arrow touch-stick__arrow--north"></span>
+          <span class="touch-stick__arrow touch-stick__arrow--east"></span>
+          <span class="touch-stick__arrow touch-stick__arrow--south"></span>
+          <span class="touch-stick__arrow touch-stick__arrow--west"></span>
+          <div id="touch-knob"></div>
+        </div>
+        <button id="bark-button" type="button" aria-label="Bark pressure pulse" data-pressed="false">
+          <span>BARK</span>
+        </button>
+      </section>
+    </main>
+
+    <noscript>This WebGPU prototype requires JavaScript.</noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

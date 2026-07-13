@@ -1,0 +1,32 @@
+{
+  "name": "sds-gpu-boids",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "vitest run tests/reference.test.ts",
+    "test:e2e": "playwright test",
+    "verify": "npm run test:unit && npm run build && npm run test:e2e",
+    "benchmark": "node scripts/benchmark.mjs",
+    "verify:visual": "playwright test tests/visual.spec.ts",
+    "inspect:canvas": "node scripts/inspect-threejs-canvas.mjs"
+  },
+  "dependencies": {
+    "three": "0.185.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@types/node": "25.9.0",
+    "@types/pngjs": "6.0.5",
+    "@types/three": "0.185.0",
+    "@webgpu/types": "0.1.71",
+    "pngjs": "7.0.0",
+    "typescript": "6.0.3",
+    "vite": "8.1.4",
+    "vitest": "4.1.10"
+  }
+}
