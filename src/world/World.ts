@@ -141,7 +141,7 @@ export class World {
     const uniqueKeys = Array.from(new Set(keys));
     const entries = await Promise.all(uniqueKeys.map(async (key) => [key, await loadHomeFieldModel(this.loader, key)] as const));
     const models = new Map<HomeFieldModelKey, GLTF>(entries);
-    const manifest = await fetch('/placement/field.json').then((response) => {
+    const manifest = await fetch(`${import.meta.env.BASE_URL}placement/field.json`).then((response) => {
       if (!response.ok) throw new Error(`Home Field placement manifest failed: ${response.status}`);
       return response.json() as Promise<PlacementManifest>;
     });

@@ -1,4 +1,4 @@
-const AUDIO_ROOT = '/assets/audio';
+const AUDIO_ROOT = `${import.meta.env.BASE_URL}assets/audio`;
 
 const SOUNDS = {
   bark: `${AUDIO_ROOT}/dog_bark_jep.mp3`,

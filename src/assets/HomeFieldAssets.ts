@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 
-const MODEL_ROOT = '/assets/models';
+const MODEL_ROOT = `${import.meta.env.BASE_URL}assets/models`;
 
 export const HOME_FIELD_MODELS = {
   dog: `${MODEL_ROOT}/Jep.glb`,
@@ -32,7 +32,7 @@ export type HomeFieldModelKey = keyof typeof HOME_FIELD_MODELS;
 
 export function createHomeFieldLoader(): GLTFLoader {
   const draco = new DRACOLoader();
-  draco.setDecoderPath('/assets/draco/');
+  draco.setDecoderPath(`${import.meta.env.BASE_URL}assets/draco/`);
   const loader = new GLTFLoader();
   loader.setDRACOLoader(draco);
   loader.setMeshoptDecoder(MeshoptDecoder);
@@ -42,4 +42,3 @@ export function createHomeFieldLoader(): GLTFLoader {
 export async function loadHomeFieldModel(loader: GLTFLoader, key: HomeFieldModelKey): Promise<GLTF> {
   return loader.loadAsync(HOME_FIELD_MODELS[key]);
 }
-

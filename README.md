@@ -4,6 +4,8 @@ A standalone, playable WebGPU re-imagining of Sheep Dog Simulator's Home Field. 
 
 This is a new-engine prototype. It is not a Sheep Dog Simulator scene, game mode, multiplayer client, or replacement release. It deliberately does not import the production game's `shared/` deterministic simulation or connect to its Cloudflare Worker.
 
+Play the public build at [matthew-kissinger.github.io/sds-gpu-boids](https://matthew-kissinger.github.io/sds-gpu-boids/). The source repository is private, while GitHub Actions publishes the built static site to GitHub Pages.
+
 ## Requirements
 
 - Node.js 22 or newer
