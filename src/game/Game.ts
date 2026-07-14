@@ -53,7 +53,6 @@ export class Game {
   private readonly performance = new PerformanceTracker();
   private readonly movement = new THREE.Vector2();
   private readonly inputMovement = new THREE.Vector2();
-  private readonly dogGroundPosition = new THREE.Vector2();
   private readonly goalPosition = new THREE.Vector3();
   private readonly dogStart = new THREE.Vector3();
   private readonly arenaBounds: ArenaBounds = { halfWidth: 46, halfDepth: 46 };
@@ -205,7 +204,6 @@ export class Game {
       this.tuning.dogRadius,
       this.tuning.dogStrength,
     );
-    this.world.setDog(this.dogGroundPosition.set(this.dog.position.x, this.dog.position.z));
     if (!this.config.goalDemo || this.simulationElapsed <= delta) {
       const computeStart = performance.now();
       this.boids.step(delta);

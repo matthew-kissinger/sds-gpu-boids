@@ -8,7 +8,6 @@ import {
 import { createGroundMaterial } from '../render/GroundMaterial';
 import type { CollisionSegment } from './Collision';
 import { CornerFlags } from './CornerFlags';
-import { Grass } from './Grass';
 
 const SHADOW_CAMERA_MARGIN = 1.15;
 const SUN_DISTANCE = 260;
@@ -105,7 +104,6 @@ export class World {
   private readonly ambientLight = new THREE.HemisphereLight('#eef3ff', '#3c5a34', 0.9);
   private readonly sunLight = new THREE.DirectionalLight('#fff3c4', 2.6);
   private readonly fillLight = new THREE.DirectionalLight('#ffd8a8', 0.9);
-  private readonly grass: Grass;
   private readonly cornerFlags: CornerFlags;
   private readonly collisionSegments: CollisionSegment[] = [];
   private extent = 140;
@@ -142,9 +140,6 @@ export class World {
 
     this.group.add(this.ambientLight, this.sunLight, this.fillLight);
 
-    this.grass = new Grass(this.extent);
-    this.group.add(this.grass.mesh);
-
     this.cornerFlags = new CornerFlags([
       [-this.extent, -this.extent],
       [this.extent, -this.extent],
@@ -155,10 +150,6 @@ export class World {
 
     scene.add(this.group);
     this.configure(this.extent);
-  }
-
-  setDog(position: Readonly<THREE.Vector2>): void {
-    this.grass.setDog(position);
   }
 
   get fenceCollisionSegments(): readonly CollisionSegment[] {
@@ -238,7 +229,6 @@ export class World {
     });
     for (const geometry of geometries) geometry.dispose();
     for (const material of materials) material.dispose();
-    this.grass.dispose();
     this.cornerFlags.dispose();
     this.loader.dracoLoader?.dispose();
     this.group.removeFromParent();
