@@ -16,6 +16,7 @@ import {
   type BoidDiagnostics,
 } from '../gpu';
 import { FlockRenderer } from '../render/FlockRenderer';
+import { createSkyDome } from '../render/SkyDome';
 import { CameraRig } from '../systems/CameraRig';
 import { Hud, type HudState, type SimulationScenario } from '../systems/Hud';
 import { AudioSystem } from '../systems/AudioSystem';
@@ -52,6 +53,7 @@ export class Game {
   private readonly performance = new PerformanceTracker();
   private readonly movement = new THREE.Vector2();
   private readonly inputMovement = new THREE.Vector2();
+  private readonly dogGroundPosition = new THREE.Vector2();
   private readonly goalPosition = new THREE.Vector3();
   private readonly dogStart = new THREE.Vector3();
   private readonly arenaBounds: ArenaBounds = { halfWidth: 46, halfDepth: 46 };
@@ -88,10 +90,13 @@ export class Game {
     this.capability = bundle.capability;
     this.adapterLabel = this.formatAdapter(bundle);
     this.cameraRig = new CameraRig(this.camera, canvas);
-    this.scene.background = new THREE.Color('#b9d5e8');
-    this.scene.fog = new THREE.Fog('#c9d9df', 330, 820);
+    const sky = createSkyDome();
+    // three/webgpu resolves a scene background from `backgroundNode` when present; this three.js
+    // version's bundled types don't declare it on Scene yet, hence the cast.
+    (this.scene as unknown as { backgroundNode: unknown }).backgroundNode = sky.node;
+    this.scene.fog = new THREE.Fog('#cfd9e8', 330, 820);
 
-    this.world = new World(this.scene);
+    this.world = new World(this.scene, sky.sunDirection);
     this.boids = new GpuBoidSystem(this.renderer);
     this.boids.setDeepDiagnostics(this.config.deepDiagnostics);
     this.configureSimulation(false);
@@ -107,9 +112,15 @@ export class Game {
       onCountChange: (count) => this.setCount(count),
       onScenarioChange: (scenario) => this.setScenario(scenario),
       onPause: () => this.togglePause(),
-      onRestart: () => this.restart(),
+      onRestart: () => {
+        this.audio.playClick();
+        this.restart();
+      },
       onMute: () => this.audio.toggleMute(),
-      onCamera: () => this.cameraRig.cycleMode(),
+      onCamera: () => {
+        this.audio.playClick();
+        return this.cameraRig.cycleMode();
+      },
     });
     this.tuningPanel = new TuningPanel((tuning) => this.applyTuning(tuning));
 
@@ -174,6 +185,7 @@ export class Game {
     this.input.readMovement(this.inputMovement);
     this.cameraRig.transformMovement(this.inputMovement, this.movement);
     this.dog.update(delta, this.simulationElapsed, this.movement, this.arenaBounds);
+    this.dog.resolveCollision(this.world.fenceCollisionSegments);
 
     if (this.input.consumeBarkPressed() && this.dog.tryBark()) {
       this.boids.setBark(
@@ -193,6 +205,7 @@ export class Game {
       this.tuning.dogRadius,
       this.tuning.dogStrength,
     );
+    this.world.setDog(this.dogGroundPosition.set(this.dog.position.x, this.dog.position.z));
     if (!this.config.goalDemo || this.simulationElapsed <= delta) {
       const computeStart = performance.now();
       this.boids.step(delta);
@@ -251,9 +264,11 @@ export class Game {
       fog.near = Math.max(40, extent * 1.2);
       fog.far = Math.max(120, extent * 3.2);
     }
-    this.arenaBounds.halfWidth = extent;
-    this.arenaBounds.halfDepth = extent;
     this.world.configure(extent);
+    this.arenaBounds.halfWidth = extent;
+    // Depth reaches past the gate into the pen - the fence-segment collision (not this coarse
+    // box) is what actually stops the dog at the true pen walls, so the gate gap is walkable.
+    this.arenaBounds.halfDepth = extent + this.world.pen.depth;
     this.goalPosition.set(this.world.goal.center.x, 0, this.world.goal.center.y);
     this.boids.setGoal(this.goalPosition, this.world.goal.radius);
     this.boids.setGate(
@@ -369,6 +384,7 @@ export class Game {
       barkReadiness: this.dog.barkReadiness,
       fps,
       p95Ms,
+      elapsedSeconds: this.simulationElapsed,
       algorithm: 'compact grid / exact radius',
       gridMaxOccupancy: this.diagnostics?.maxCellOccupancy ?? 0,
       gridCellCapacity: MAX_CANDIDATES_PER_BOID,

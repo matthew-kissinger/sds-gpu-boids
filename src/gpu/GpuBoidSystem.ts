@@ -7,6 +7,7 @@ import {
   If,
   Loop,
   Return,
+  atan,
   atomicAdd,
   atomicMax,
   atomicStore,
@@ -361,6 +362,7 @@ export class GpuBoidSystem {
       position: this.positionRead.toAttribute().xyz,
       velocity: this.currentVelocityRead.toAttribute().xyz,
       state: this.positionRead.toAttribute().w,
+      cachedYaw: this.currentVelocityRead.toAttribute().w,
     };
   }
 
@@ -810,6 +812,10 @@ export class GpuBoidSystem {
       const index = instanceIndex;
       const position = this.positionWrite.element(index).toVar();
       const velocity = this.nextVelocityRead.element(index).xyz.toVar();
+      // Read the previous cached yaw through the same read-write binding used for the
+      // final write below - mixing a read-only and a read-write binding of the same
+      // underlying buffer in one compute pass trips a WebGPU validation error.
+      const cachedYaw = this.currentVelocityWrite.element(index).w.toVar();
       If(position.w.lessThan(0.5), () => Return());
       position.xyz.addAssign(velocity.mul(this.deltaUniform));
 
@@ -855,6 +861,7 @@ export class GpuBoidSystem {
               .add(2)
               .add(float(row).div(rowCount.sub(1)).mul(this.penDepthUniform.sub(4))),
           );
+          cachedYaw.assign(atan(velocity.z, velocity.x));
           position.w.assign(0);
           velocity.assign(vec3(0));
         },
@@ -864,7 +871,7 @@ export class GpuBoidSystem {
         .assign(vec4(position.x, float(0.24), position.z, position.w));
       this.currentVelocityWrite
         .element(index)
-        .assign(vec4(velocity.x, float(0), velocity.z, float(0)));
+        .assign(vec4(velocity.x, float(0), velocity.z, cachedYaw));
     })().compute(count, [COMPUTE_WORKGROUP_SIZE]);
   }
 
@@ -922,7 +929,7 @@ export class GpuBoidSystem {
       currentVelocities[offset] = Math.cos(direction) * speed;
       currentVelocities[offset + 1] = 0;
       currentVelocities[offset + 2] = Math.sin(direction) * speed;
-      currentVelocities[offset + 3] = 0;
+      currentVelocities[offset + 3] = direction;
       nextVelocities[offset] = currentVelocities[offset];
       nextVelocities[offset + 1] = 0;
       nextVelocities[offset + 2] = currentVelocities[offset + 2];

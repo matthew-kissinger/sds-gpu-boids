@@ -1,8 +1,10 @@
 import './styles.css';
 import { Game } from './game/Game';
+import { WebGpuUnsupportedError } from './core/Renderer';
 
 function showStartupError(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
+  const unsupported = error instanceof WebGpuUnsupportedError;
   const overlay = document.querySelector<HTMLElement>('#game-overlay');
   const kicker = document.querySelector<HTMLElement>('#overlay-kicker');
   const title = document.querySelector<HTMLElement>('#overlay-title');
@@ -12,9 +14,15 @@ function showStartupError(error: unknown): void {
   if (overlay && kicker && title && body && retry && secondary) {
     overlay.dataset.state = 'error';
     overlay.hidden = false;
-    kicker.textContent = 'WEBGPU REQUIRED';
-    title.textContent = 'GPU flock could not start';
-    body.textContent = `${message} Use a current browser with hardware WebGPU enabled.`;
+    if (unsupported) {
+      kicker.textContent = 'WEBGPU REQUIRED';
+      title.textContent = 'GPU flock could not start';
+      body.textContent = `${message} Use a current browser with hardware WebGPU enabled.`;
+    } else {
+      kicker.textContent = 'STARTUP ERROR';
+      title.textContent = 'Flock Lab could not load';
+      body.textContent = `${message} Reload, or check your connection.`;
+    }
     retry.textContent = 'Retry';
     retry.hidden = false;
     retry.addEventListener('click', () => window.location.reload(), { once: true });
@@ -23,7 +31,7 @@ function showStartupError(error: unknown): void {
   }
   window.__THREE_GAME_DIAGNOSTICS__ = {
     status: 'error',
-    unsupported: true,
+    unsupported,
     error: message,
   };
 }

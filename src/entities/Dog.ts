@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { createHomeFieldLoader, loadHomeFieldModel } from '../assets/HomeFieldAssets';
+import { resolveSegmentCollisions, type CollisionSegment } from '../world/Collision';
 
 export type ArenaBounds = {
   halfWidth: number;
@@ -46,6 +47,22 @@ export const DEFAULT_DOG_TUNING: DogTuning = {
   barkMaxRadius: 32,
 };
 
+type LocomotionTier = 'idle' | 'walk' | 'trot' | 'run';
+
+/** Overlapping [low, high) bands give tier switches hysteresis instead of flickering at a hard cutoff. */
+const LOCOMOTION_BANDS: Record<LocomotionTier, readonly [number, number]> = {
+  idle: [0, 0.08],
+  walk: [0.05, 0.45],
+  trot: [0.4, 0.75],
+  run: [0.7, Infinity],
+};
+const LOCOMOTION_ORDER: readonly LocomotionTier[] = ['idle', 'walk', 'trot', 'run'];
+const IDLE_CLIP_NAMES: readonly string[] = ['Idle_1', 'Idle_2', 'Idle_3', 'Idle_4', 'Idle_6', 'Idle_7'];
+
+const BARK_ARC_COUNT = 3;
+const BARK_ARC_ANGLE = Math.PI * 0.7;
+const BARK_ARC_STAGGER = 0.1;
+
 export class Dog {
   readonly group = new THREE.Group();
   readonly position = new THREE.Vector3();
@@ -67,16 +84,23 @@ export class Dog {
   private readonly geometries: THREE.BufferGeometry[] = [];
   private readonly materials: THREE.Material[] = [];
   private readonly barkListeners = new Set<(event: BarkPulseEvent) => void>();
-  private readonly barkRingMaterial: THREE.MeshBasicMaterial;
-  private readonly barkRing: THREE.Mesh;
+  private readonly barkArcs: THREE.Mesh[] = [];
+  private readonly barkArcMaterials: THREE.MeshBasicMaterial[] = [];
   private readonly tuning: DogTuning;
+  private readonly collisionPosition = new THREE.Vector2();
   private importedModel: THREE.Object3D | null = null;
   private mixer: THREE.AnimationMixer | null = null;
   private currentAction: THREE.AnimationAction | null = null;
+  private readonly idleActions: THREE.AnimationAction[] = [];
   private idleAction: THREE.AnimationAction | null = null;
   private walkAction: THREE.AnimationAction | null = null;
+  private trotAction: THREE.AnimationAction | null = null;
   private runAction: THREE.AnimationAction | null = null;
   private barkAction: THREE.AnimationAction | null = null;
+  private locomotionTier: LocomotionTier = 'idle';
+  private idleVariantIndex = 0;
+  private idleVariantTimer = 0;
+  private nextIdleSwitchAt = 5;
 
   private barkAge = Infinity;
   private barkCooldownRemaining = 0;
@@ -154,21 +178,31 @@ export class Dog {
 
     this.group.add(this.modelRoot);
 
-    const barkRingGeometry = this.trackGeometry(new THREE.RingGeometry(0.86, 1, 40));
-    this.barkRingMaterial = new THREE.MeshBasicMaterial({
-      color: '#f5c85b',
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    this.materials.push(this.barkRingMaterial);
-    this.barkRing = new THREE.Mesh(barkRingGeometry, this.barkRingMaterial);
-    this.barkRing.name = 'Bark pressure pulse';
-    this.barkRing.rotation.x = -Math.PI / 2;
-    this.barkRing.position.y = 0.05;
-    this.barkRing.visible = false;
-    this.group.add(this.barkRing);
+    // Centered at theta=-PI/2 (pre-rotation -Y) so that after the -90deg X-axis flatten below,
+    // the arc's sweep is centered on local +Z - which prepareRender()'s heading rotation maps
+    // to the dog's forward direction (matches how `this.forward` is derived from heading).
+    const arcGeometry = this.trackGeometry(
+      new THREE.RingGeometry(0.82, 1, 48, 1, -Math.PI / 2 - BARK_ARC_ANGLE / 2, BARK_ARC_ANGLE),
+    );
+    for (let index = 0; index < BARK_ARC_COUNT; index += 1) {
+      const material = new THREE.MeshBasicMaterial({
+        color: '#f5c85b',
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+      });
+      this.materials.push(material);
+      this.barkArcMaterials.push(material);
+      const arc = new THREE.Mesh(arcGeometry, material);
+      arc.name = `Bark pressure arc ${index}`;
+      arc.rotation.x = -Math.PI / 2;
+      arc.position.y = 0.05;
+      arc.visible = false;
+      this.barkArcs.push(arc);
+      this.group.add(arc);
+    }
   }
 
   async loadModel(): Promise<void> {
@@ -190,9 +224,14 @@ export class Dog {
       const animation = gltf.animations.find((candidate) => candidate.name === name);
       return animation ? this.mixer!.clipAction(animation) : null;
     };
-    this.idleAction = clip('Idle_1') ?? clip('Idle_2');
+    for (const name of IDLE_CLIP_NAMES) {
+      const action = clip(name);
+      if (action) this.idleActions.push(action);
+    }
+    this.idleAction = this.idleActions[0] ?? null;
     this.walkAction = clip('Walk_F_IP') ?? this.idleAction;
-    this.runAction = clip('Run_F_IP') ?? clip('RunFast_F_IP') ?? this.walkAction;
+    this.trotAction = clip('Trot_F_IP') ?? this.walkAction;
+    this.runAction = clip('Run_F_IP') ?? clip('RunFast_F_IP') ?? this.trotAction;
     this.barkAction = clip('Bark');
     this.transitionAnimation(this.idleAction, 0);
   }
@@ -244,7 +283,16 @@ export class Dog {
     }
 
     if (this.mixer) {
-      const locomotion = speedRatio > 0.56 ? this.runAction : speedRatio > 0.035 ? this.walkAction : this.idleAction;
+      this.locomotionTier = this.resolveLocomotionTier(speedRatio);
+      this.updateIdleVariant(delta, this.locomotionTier === 'idle');
+      const locomotion: THREE.AnimationAction | null =
+        this.locomotionTier === 'run'
+          ? this.runAction
+          : this.locomotionTier === 'trot'
+            ? this.trotAction
+            : this.locomotionTier === 'walk'
+              ? this.walkAction
+              : this.idleAction;
       if (this.barkAge >= this.tuning.barkDuration || !Number.isFinite(this.barkAge)) {
         this.transitionAnimation(locomotion, 0.18);
       }
@@ -255,6 +303,14 @@ export class Dog {
     }
 
     this.updateBark(delta);
+  }
+
+  /** Pushes the dog out of fence geometry. Call after `update()`, before anything reads `position`. */
+  resolveCollision(segments: readonly CollisionSegment[]): void {
+    this.collisionPosition.set(this.position.x, this.position.z);
+    resolveSegmentCollisions(this.collisionPosition, segments, this.tuning.edgePadding);
+    this.position.x = this.collisionPosition.x;
+    this.position.z = this.collisionPosition.y;
   }
 
   prepareRender(interpolation: number): void {
@@ -275,7 +331,7 @@ export class Dog {
     this.barkStrength = 1;
     this.barkRadius = 1.5;
     this.barkSequence += 1;
-    this.barkRing.visible = true;
+    for (const arc of this.barkArcs) arc.visible = true;
     this.transitionAnimation(this.barkAction, 0.08);
 
     const event: BarkPulseEvent = {
@@ -331,8 +387,8 @@ export class Dog {
     this.barkRadius = 0;
     this.barkAge = Infinity;
     this.barkCooldownRemaining = 0;
-    this.barkRing.visible = false;
-    this.barkRingMaterial.opacity = 0;
+    for (const arc of this.barkArcs) arc.visible = false;
+    for (const material of this.barkArcMaterials) material.opacity = 0;
   }
 
   dispose(): void {
@@ -364,21 +420,58 @@ export class Dog {
     if (!Number.isFinite(this.barkAge)) return;
 
     this.barkAge += delta;
-    const progress = THREE.MathUtils.clamp(this.barkAge / this.tuning.barkDuration, 0, 1);
-    this.barkStrength = 1 - progress;
-    this.barkRadius = THREE.MathUtils.lerp(1.5, this.tuning.barkMaxRadius, progress);
+    const totalDuration = this.tuning.barkDuration + (BARK_ARC_COUNT - 1) * BARK_ARC_STAGGER;
+    const overallProgress = THREE.MathUtils.clamp(this.barkAge / totalDuration, 0, 1);
+    this.barkStrength = 1 - overallProgress;
+    this.barkRadius = THREE.MathUtils.lerp(1.5, this.tuning.barkMaxRadius, overallProgress);
 
-    const ringScale = this.barkRadius;
-    this.barkRing.scale.set(ringScale, ringScale, ringScale);
-    this.barkRingMaterial.opacity = (1 - progress) * 0.52;
+    for (let index = 0; index < this.barkArcs.length; index += 1) {
+      const arc = this.barkArcs[index]!;
+      const material = this.barkArcMaterials[index]!;
+      const staggeredAge = this.barkAge - index * BARK_ARC_STAGGER;
+      if (staggeredAge <= 0) {
+        arc.visible = false;
+        continue;
+      }
+      const arcProgress = THREE.MathUtils.clamp(staggeredAge / this.tuning.barkDuration, 0, 1);
+      const eased = 1 - (1 - arcProgress) ** 3;
+      const scale = THREE.MathUtils.lerp(1.5, this.tuning.barkMaxRadius, eased);
+      arc.visible = true;
+      arc.scale.setScalar(scale);
+      material.opacity = (1 - arcProgress) * 0.52;
+    }
 
-    if (progress >= 1) {
+    if (this.barkAge >= totalDuration) {
       this.barkAge = Infinity;
       this.barkStrength = 0;
       this.barkRadius = 0;
-      this.barkRing.visible = false;
-      this.barkRingMaterial.opacity = 0;
+      for (const arc of this.barkArcs) arc.visible = false;
+      for (const material of this.barkArcMaterials) material.opacity = 0;
     }
+  }
+
+  private resolveLocomotionTier(speedRatio: number): LocomotionTier {
+    const [currentLow, currentHigh] = LOCOMOTION_BANDS[this.locomotionTier];
+    if (speedRatio >= currentLow && speedRatio < currentHigh) return this.locomotionTier;
+    for (const tier of LOCOMOTION_ORDER) {
+      const [low, high] = LOCOMOTION_BANDS[tier];
+      if (speedRatio >= low && speedRatio < high) return tier;
+    }
+    return 'run';
+  }
+
+  private updateIdleVariant(delta: number, isIdle: boolean): void {
+    if (this.idleActions.length < 2) return;
+    if (!isIdle) {
+      this.idleVariantTimer = 0;
+      return;
+    }
+    this.idleVariantTimer += delta;
+    if (this.idleVariantTimer < this.nextIdleSwitchAt) return;
+    this.idleVariantTimer = 0;
+    this.nextIdleSwitchAt = 4 + Math.random() * 3;
+    this.idleVariantIndex = (this.idleVariantIndex + 1) % this.idleActions.length;
+    this.idleAction = this.idleActions[this.idleVariantIndex]!;
   }
 
   private createStandardMaterial(color: THREE.ColorRepresentation, roughness: number): THREE.MeshStandardMaterial {

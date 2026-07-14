@@ -1,4 +1,4 @@
-# Sheepdog GPU Home Field
+# Flock Lab
 
 A standalone, playable WebGPU re-imagining of Sheep Dog Simulator's Home Field. It uses the original Jep dog, farm, fence, gate, tree, rock, homestead, music, bark, and bleat assets while a new GPU compute engine simulates and directly renders 100,000 sheep, with explicit stress tiers through 500,000.
 

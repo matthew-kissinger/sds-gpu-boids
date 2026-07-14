@@ -22,6 +22,10 @@ export type RendererBundle = {
   capability: WebGpuCapabilityReport;
 };
 
+/** Thrown only when the adapter genuinely can't be found - lets callers tell this apart from an
+ * unrelated startup failure (a 404'd asset, a bad manifest, ...) that has nothing to do with WebGPU. */
+export class WebGpuUnsupportedError extends Error {}
+
 function emptyReport(): WebGpuCapabilityReport {
   return {
     available: false,
@@ -67,7 +71,7 @@ export async function createRenderer(
 ): Promise<RendererBundle> {
   const capability = await inspectWebGpu();
   if (!capability.available) {
-    throw new Error('WebGPU is unavailable. This prototype intentionally has no CPU or WebGL fallback.');
+    throw new WebGpuUnsupportedError('WebGPU is unavailable. This prototype intentionally has no CPU or WebGL fallback.');
   }
 
   const renderer = new THREE.WebGPURenderer({
@@ -82,7 +86,8 @@ export async function createRenderer(
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
-  renderer.shadowMap.enabled = false;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   return { renderer, capability };
 }

@@ -1,6 +1,7 @@
 {
-  "name": "sds-gpu-boids",
+  "name": "flock-lab",
   "version": "0.1.0",
+  "description": "Flock Lab - a WebGPU compute prototype for large interactive sheep flocks, built on Sheep Dog Simulator's Home Field.",
   "private": true,
   "type": "module",
   "scripts": {

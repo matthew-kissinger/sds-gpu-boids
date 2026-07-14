@@ -5,6 +5,13 @@ import {
   loadHomeFieldModel,
   type HomeFieldModelKey,
 } from '../assets/HomeFieldAssets';
+import { createGroundMaterial } from '../render/GroundMaterial';
+import type { CollisionSegment } from './Collision';
+import { CornerFlags } from './CornerFlags';
+import { Grass } from './Grass';
+
+const SHADOW_CAMERA_MARGIN = 1.15;
+const SUN_DISTANCE = 260;
 
 export type GoalDefinition = {
   center: THREE.Vector2;
@@ -69,16 +76,7 @@ export class World {
   };
 
   private readonly loader = createHomeFieldLoader();
-  private readonly floorTexture = this.createFloorTexture();
-  private readonly floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(2, 2),
-    new THREE.MeshStandardMaterial({
-      color: '#687f4d',
-      map: this.floorTexture,
-      roughness: 0.98,
-      metalness: 0,
-    }),
-  );
+  private readonly floor = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), createGroundMaterial());
   private readonly goalFill = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
     new THREE.MeshBasicMaterial({ color: '#d7b35b', transparent: true, opacity: 0.1, depthWrite: false }),
@@ -104,10 +102,16 @@ export class World {
   private readonly assetLayer = new THREE.Group();
   private readonly perimeterLayer = new THREE.Group();
   private readonly disposableRoots: THREE.Object3D[] = [];
+  private readonly ambientLight = new THREE.HemisphereLight('#eef3ff', '#3c5a34', 0.9);
+  private readonly sunLight = new THREE.DirectionalLight('#fff3c4', 2.6);
+  private readonly fillLight = new THREE.DirectionalLight('#ffd8a8', 0.9);
+  private readonly grass: Grass;
+  private readonly cornerFlags: CornerFlags;
+  private readonly collisionSegments: CollisionSegment[] = [];
   private extent = 140;
   private assetsReady = false;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, sunDirection: THREE.Vector3) {
     this.group.name = 'Home Field - GPU edition';
     this.assetLayer.name = 'Home Field authored assets';
     this.perimeterLayer.name = 'Home Field fence and corral';
@@ -124,13 +128,41 @@ export class World {
     this.goalCrown.rotation.x = Math.PI / 2;
     this.group.add(this.goalFill, this.goalRing, this.goalBeacon, this.goalCrown, this.assetLayer, this.perimeterLayer);
 
-    const hemisphere = new THREE.HemisphereLight('#f7f0d5', '#35532f', 1.75);
-    const sun = new THREE.DirectionalLight('#fff1bd', 2.25);
-    sun.position.set(-120, 190, 80);
-    sun.castShadow = false;
-    this.group.add(hemisphere, sun);
+    this.sunLight.position.copy(sunDirection).multiplyScalar(SUN_DISTANCE);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.set(512, 512);
+    this.sunLight.shadow.bias = -0.0004;
+    this.sunLight.shadow.normalBias = 0.6;
+    this.sunLight.shadow.camera.near = 10;
+    this.sunLight.shadow.camera.far = SUN_DISTANCE * 2.2;
+
+    const fillDirection = new THREE.Vector3(-sunDirection.x, 0.35, -sunDirection.z).normalize();
+    this.fillLight.position.copy(fillDirection).multiplyScalar(SUN_DISTANCE * 0.6);
+    this.fillLight.castShadow = false;
+
+    this.group.add(this.ambientLight, this.sunLight, this.fillLight);
+
+    this.grass = new Grass(this.extent);
+    this.group.add(this.grass.mesh);
+
+    this.cornerFlags = new CornerFlags([
+      [-this.extent, -this.extent],
+      [this.extent, -this.extent],
+      [-this.extent, this.extent],
+      [this.extent, this.extent],
+    ]);
+    this.group.add(this.cornerFlags.group);
+
     scene.add(this.group);
     this.configure(this.extent);
+  }
+
+  setDog(position: Readonly<THREE.Vector2>): void {
+    this.grass.setDog(position);
+  }
+
+  get fenceCollisionSegments(): readonly CollisionSegment[] {
+    return this.collisionSegments;
   }
 
   async loadAssets(): Promise<void> {
@@ -157,7 +189,14 @@ export class World {
     this.extent = extent;
     const terrainSpan = extent * 3.5;
     this.floor.scale.set(terrainSpan, terrainSpan, 1);
-    this.floorTexture.repeat.set(Math.max(16, terrainSpan / 7), Math.max(16, terrainSpan / 7));
+
+    const shadowExtent = extent * SHADOW_CAMERA_MARGIN;
+    const shadowCamera = this.sunLight.shadow.camera;
+    shadowCamera.left = -shadowExtent;
+    shadowCamera.right = shadowExtent;
+    shadowCamera.top = shadowExtent;
+    shadowCamera.bottom = -shadowExtent;
+    shadowCamera.updateProjectionMatrix();
 
     this.gate.width = Math.max(16, extent * 0.1);
     this.gate.position.set(0, extent);
@@ -174,6 +213,7 @@ export class World {
   }
 
   update(elapsed: number, holdProgress: number): void {
+    this.cornerFlags.update(elapsed);
     const pulse = 1 + Math.sin(elapsed * 2.1) * 0.012 + holdProgress * 0.035;
     this.goalRing.scale.setScalar(this.gate.width * 0.62 * pulse);
     const material = this.goalRing.material as THREE.MeshBasicMaterial;
@@ -198,7 +238,8 @@ export class World {
     });
     for (const geometry of geometries) geometry.dispose();
     for (const material of materials) material.dispose();
-    this.floorTexture.dispose();
+    this.grass.dispose();
+    this.cornerFlags.dispose();
     this.loader.dracoLoader?.dispose();
     this.group.removeFromParent();
   }
@@ -300,6 +341,7 @@ export class World {
     const postMatrices: THREE.Matrix4[] = [];
     const railMatrices: THREE.Matrix4[] = [];
     const addFenceLine = (start: THREE.Vector3, end: THREE.Vector3): void => {
+      this.collisionSegments.push({ x1: start.x, z1: start.z, x2: end.x, z2: end.z });
       const distance = start.distanceTo(end);
       const count = Math.max(1, Math.ceil(distance / spacing));
       const direction = end.clone().sub(start);
@@ -406,27 +448,4 @@ export class World {
     });
   }
 
-  private createFloorTexture(): THREE.CanvasTexture {
-    const size = 256;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Could not create Home Field ground texture.');
-    context.fillStyle = '#637b4b';
-    context.fillRect(0, 0, size, size);
-    for (let index = 0; index < 950; index += 1) {
-      const x = (index * 73) % size;
-      const y = (index * 151) % size;
-      const shade = index % 3 === 0 ? 'rgba(40,67,35,0.2)' : 'rgba(185,199,121,0.1)';
-      context.fillStyle = shade;
-      context.fillRect(x, y, 2 + (index % 4), 1);
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.anisotropy = 4;
-    return texture;
-  }
 }

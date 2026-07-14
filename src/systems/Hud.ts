@@ -17,6 +17,7 @@ export type HudState = {
   barkReadiness: number;
   fps: number;
   p95Ms: number;
+  elapsedSeconds: number;
   algorithm: string;
   gridMaxOccupancy: number;
   gridCellCapacity: number;
@@ -73,6 +74,10 @@ export class Hud {
   private readonly overlayBody = this.getElement('#overlay-body');
   private readonly overlayPrimary = this.getElement<HTMLButtonElement>('#overlay-primary');
   private readonly overlaySecondary = this.getElement<HTMLButtonElement>('#overlay-secondary');
+  private readonly overlayStats = this.getElement('#overlay-stats');
+  private readonly overlayStatFlock = this.getElement('#overlay-stat-flock');
+  private readonly overlayStatTime = this.getElement('#overlay-stat-time');
+  private readonly overlayStatFps = this.getElement('#overlay-stat-fps');
   private readonly callbacks: Partial<HudCallbacks>;
 
   private overlayState: OverlayState = 'playing';
@@ -156,7 +161,9 @@ export class Hud {
 
     this.setMeter(this.goalMeterFill, state.goalPercent / 100, state.goalPercent);
     this.setMeter(this.holdMeterFill, state.holdProgress, state.holdProgress * 100);
-    this.barkButton.style.setProperty('--bark-readiness', String(this.clamp01(state.barkReadiness)));
+    // Set on the root (not just the touch bark button) so the desktop bark-hint dot, which
+    // lives outside #touch-controls, can read the same custom property via inheritance.
+    document.documentElement.style.setProperty('--bark-readiness', String(this.clamp01(state.barkReadiness)));
     this.barkButton.disabled = !state.ready || Boolean(state.error) || state.paused || state.won;
 
     const countValue = String(Math.round(state.boidCount));
@@ -175,6 +182,12 @@ export class Hud {
     else if (state.won) this.setOverlay('won');
     else if (state.paused) this.setOverlay('paused');
     else this.setOverlay('playing');
+
+    if (state.won) {
+      this.setText(this.overlayStatFlock, Math.round(state.boidCount).toLocaleString());
+      this.setText(this.overlayStatTime, this.formatDuration(state.elapsedSeconds));
+      this.setText(this.overlayStatFps, Math.max(0, Math.round(state.fps)).toString());
+    }
   }
 
   setAdapter(adapter: string): void {
@@ -222,6 +235,7 @@ export class Hud {
     this.overlayState = state;
     this.overlay.dataset.state = state;
     this.overlay.hidden = state === 'playing';
+    this.overlayStats.hidden = state !== 'won';
 
     if (state === 'loading') {
       this.setText(this.overlayKicker, 'WEBGPU COMPUTE');
@@ -271,6 +285,13 @@ export class Hud {
   private countScenario(value: string): SimulationScenario {
     if (value === 'field' || value === 'herd' || value === 'goal') return value;
     return 'constant';
+  }
+
+  private formatDuration(seconds: number): string {
+    const total = Math.max(0, Math.round(seconds));
+    const minutes = Math.floor(total / 60);
+    const remainder = total % 60;
+    return `${minutes}:${remainder.toString().padStart(2, '0')}`;
   }
 
   private clamp01(value: number): number {
