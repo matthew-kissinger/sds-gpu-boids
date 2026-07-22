@@ -1,10 +1,16 @@
 # Flock Lab
 
-A standalone, playable WebGPU re-imagining of Sheep Dog Simulator's Home Field. It uses the original Jep dog, farm, fence, gate, tree, rock, homestead, music, bark, and bleat assets while a new GPU compute engine simulates and directly renders 100,000 sheep, with explicit stress tiers through 500,000.
+An R&D sandbox and tech demo — not a playable game release. This is a standalone WebGPU re-imagining of the Home Field from [Sheep Dog Simulator](https://sheepdogsim.com) ([source](https://github.com/matthew-kissinger/sds)). It uses the original Jep dog, farm, fence, gate, tree, rock, homestead, music, bark, and bleat assets while a new GPU compute engine simulates and directly renders 100,000 sheep, with explicit stress tiers through 500,000.
+
+The engine's core pieces:
+
+- **GPU compute pipeline**: the whole flock lives in storage buffers. A multi-dispatch WGSL sequence — clear, count, prefix scan, scatter, neighbor steering, integrate — runs each step on the GPU, with ping-ponged velocities and direct instanced rendering. Full-flock per-frame readback is explicitly forbidden.
+- **Prefix-scan spatial grid**: a compact uniform grid rebuilt every step via parallel prefix scan, queried over the neighboring 3×3 cells with an exact distance test.
+- **CPU reference oracle**: an independent CPU implementation of the same simulation validates GPU steps entity-by-entity, alongside diagnostics for candidate truncation, cell occupancy, and invalid indices.
 
 This is a new-engine prototype. It is not a Sheep Dog Simulator scene, game mode, multiplayer client, or replacement release. It deliberately does not import the production game's `shared/` deterministic simulation or connect to its Cloudflare Worker.
 
-Play the public build at [matthew-kissinger.github.io/sds-gpu-boids](https://matthew-kissinger.github.io/sds-gpu-boids/). The source repository is private, while GitHub Actions publishes the built static site to GitHub Pages.
+Try the public build at [matthew-kissinger.github.io/sds-gpu-boids](https://matthew-kissinger.github.io/sds-gpu-boids/). GitHub Actions publishes the built static site to GitHub Pages.
 
 ## Requirements
 
@@ -69,6 +75,10 @@ The count ladder is 1k, 2k, 4k, 8k, 16k, 32k, 50k, 75k, 100k, 125k, 150k, 200k, 
 Frame p50/p95/p99 are delivered frame intervals. Compute-submit and render-submit measurements are CPU time spent issuing work. They are not GPU execution time. The benchmark emits GPU timing only when diagnostics identify a hardware timestamp query as the source.
 
 The HUD also reports candidate truncation, maximum cell occupancy, invalid indices, and the goal reduction. A high frame rate with invalid indices or silent truncation is not considered a valid result.
+
+## Design note
+
+Cranking the sheep count up did not make the game more fun. 100,000 sheep is a rendering and simulation achievement, not a gameplay one — past a few thousand, a flock stops reading as animals you herd and starts reading as texture. The interesting design space for Sheep Dog Simulator turned out to be elsewhere. This repo exists to explore the ceiling anyway: how many agents a browser can honestly simulate, and how to prove the numbers are real.
 
 See:
 
